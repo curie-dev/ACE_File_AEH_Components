@@ -1,0 +1,14 @@
+BROKER SCHEMA adesa.aeh.common.error
+
+
+
+CREATE FILTER MODULE error_handler_subflow_exception_filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		IF AUDIT_EXCEPTION_ON IS FALSE THEN
+			RETURN FALSE;
+		END IF;
+		RETURN TRUE;
+	END;
+
+END MODULE;

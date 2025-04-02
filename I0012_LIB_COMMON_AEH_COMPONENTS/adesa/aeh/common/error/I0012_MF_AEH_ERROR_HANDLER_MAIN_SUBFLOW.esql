@@ -1,0 +1,1245 @@
+BROKER SCHEMA adesa.aeh.common.error
+PATH  adesa.aeh.common.error;
+--adesa.aeh.common.audit, 
+--author: Ravi Kiran Josyula
+--IHUB pilot implementation
+--modified 04/07/09
+DECLARE GENERAL_EXCEPTION_TYPE CONSTANT INTEGER 0;
+DECLARE PARSER_EXCEPTION_TYPE CONSTANT INTEGER 1;
+DECLARE DATABASE_EXCEPTION_TYPE CONSTANT INTEGER 2;
+DECLARE USER_EXCEPTION_TYPE CONSTANT INTEGER 3;
+DECLARE PARSER_CONVERSION_EXCEPTION_TYPE CONSTANT INTEGER 4;
+DECLARE MESSAGE_EXCEPTION_TYPE CONSTANT INTEGER 5;
+DECLARE HTTP_EXCEPTION_TYPE CONSTANT INTEGER 6;
+DECLARE ERROR_TO_GEH EXTERNAL CONSTANT boolean true;
+DECLARE GEH_DEFAULT_ERROR_CODE CONSTANT CHAR '0.0.0.0';
+DECLARE GEH_GENERAL_EXCEPTION_CD EXTERNAL CONSTANT CHAR '0.0.0.0';
+DECLARE GEH_PARSER_EXCEPTION_CD EXTERNAL CONSTANT CHAR '0.0.0.0';
+DECLARE GEH_DATABASE_EXCEPTION_CD EXTERNAL CONSTANT CHAR '0.0.0.0';
+DECLARE GEH_USER_EXCEPTION_CD EXTERNAL CONSTANT CHAR '0.0.0.0';
+
+DECLARE UNKNOWN_TYPE CONSTANT CHAR 'UnKnown';
+DECLARE GEH_ERROR_CODE CONSTANT CHAR 'GEH_ERROR_CODE' ;
+DECLARE GEH_ERROR_CODE_LEN CONSTANT INT 14 ;
+DECLARE APP_SUBJECT_NAME CONSTANT CHAR 'APP_SUBJECT_NAME' ;
+DECLARE APP_SUBJECT_NAME_LEN CONSTANT INT 16 ;
+DECLARE NODE_NAME CONSTANT CHAR 'NODE_NAME' ;
+DECLARE NODE_NAME_LEN CONSTANT INT 9;
+DECLARE MOD_NAME CONSTANT CHAR 'MOD_NAME' ;
+DECLARE MOD_NAME_LEN CONSTANT INT 8 ;
+
+DECLARE CHILD_EXCEPTION_CD CONSTANT CHAR 'CHILD_EXCEPTION_CD' ;
+DECLARE CHILD_EXCEPTION_CD_LEN CONSTANT INT 18 ;
+DECLARE EXCEPTION_DETAILS CONSTANT CHAR 'EXCEPTION_DETAILS' ;
+DECLARE EXCEPTION_DETAILS_LEN CONSTANT INT 17 ;
+DECLARE USER_TRACE_1 CONSTANT CHAR 'USER_TRACE_1' ;
+DECLARE USER_TRACE_2 CONSTANT CHAR 'USER_TRACE_2' ;
+DECLARE USER_TRACE_LEN CONSTANT INT 12 ;
+
+
+DECLARE USER_EXCEPTION CONSTANT CHAR 'UserException' ;
+DECLARE DATABASE_EXCEPTION CONSTANT CHAR 'DatabaseException' ;
+DECLARE PARSER_EXCEPTION CONSTANT CHAR 'ParserException' ;
+DECLARE MESSAGE_EXCEPTION CONSTANT CHAR 'MessageException' ;
+DECLARE GENERAL_EXCEPTION CONSTANT CHAR 'RecoverableException' ;
+DECLARE PARSER_CONVERSION_EXCEPTION CONSTANT CHAR 'ConversionException';
+--Catch all socket exceptions
+DECLARE HTTP_EXCEPTION CONSTANT CHAR 'Socket'; 
+DECLARE GEH_SUBJECT CONSTANT CHAR 'IHUB.COMMON.DEFAULT'; --ZW.GEH.EXCEPTION default
+DECLARE CUSTOM_TEXT CONSTANT CHAR 'CUSTOM_TEXT';
+DECLARE CHILD_TEXT CONSTANT CHAR 'CHILD';
+DECLARE ns NAMESPACE 'http://www.zettaworks.com/GEH/ExceptionMessage.xsd';  
+DECLARE GEH_DELIMITER CONSTANT CHAR '%#%';
+DECLARE AUDIT_EXCEPTION_ON EXTERNAL CONSTANT boolean true;
+DECLARE GEH_COMMON_SYSTEM_NAME EXTERNAL CONSTANT CHAR 'IHUB';
+DECLARE GEH_COMMON_SYSTEM_VERSION EXTERNAL CONSTANT CHAR '1.0'; --1.0
+DECLARE ns2 NAMESPACE 'http://www.adesa.com/ihub/common/IHubAuditMsg.xsd';
+DECLARE GEH_SRC_SYSTEM_VERSION EXTERNAL CONSTANT CHAR '1.0';
+
+
+CREATE COMPUTE MODULE error_handler_subflow_compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+
+		DECLARE env REFERENCE TO Environment;
+		CALL InitDefaults(env);
+						
+		IF NULLIF(InputRoot.MQMD.CorrelId,'') IS NULL THEN		
+			CALL CreateMQMDHeader(env);						
+		ELSE
+			CALL CopyMessageHeaders();
+		END IF;
+		DECLARE Error INTEGER;  /* Error number extracted from exception list */
+		SET Error = 0;
+		DECLARE Path CHARACTER;  /* Current path within the exception list */
+
+		-- Check if msg has a body
+		DECLARE msgbody BLOB;
+		DECLARE noBody BOOLEAN;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		
+		SET noBody = FALSE;
+		--get last child
+		IF FIELDNAME (InputRoot.*[<]) = 'MQMD' OR FIELDNAME (InputRoot.*[<]) = 'MQRFH2' THEN
+			SET OutputRoot.*[J] = InputRoot.*[J]; /* copy last child since CopyMessageHeaders did not */
+			SET noBody = TRUE;
+		END IF;
+		 
+		SET Environment.Errored='Y';
+					
+		/* Start at first child of exception list */
+		SET Path = 'InputExceptionList.*[1]';
+		
+		/* Loop until no more children */
+		WHILE EVAL( 'FIELDNAME(' || Path || ') IS NOT NULL' ) DO
+			/* Check if error number is available */
+			IF EVAL( 'FIELDNAME(' || Path || '.Number) IS NOT NULL' ) THEN
+				/* Remember only the deepest error number */
+				SET Error = EVAL( Path || '.Number' );
+			END IF;
+		
+			/* Step to last child of current element (usually a nested exception list */
+			SET Path = Path || '.*[<]';
+		END WHILE; /* End loop */
+		
+		-- Build error message in XML format
+		
+		SET OutputRoot.Properties.MessageDomain = 'XMLNS';
+		IF Error <> 0 THEN
+			SET OutputRoot.XMLNS.ErrorMessage.ExceptionNumber = Error;
+		END IF;
+				
+		IF NULLIF(adesa.aeh.common.audit.get_audit_msg_id(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.MessageId = adesa.aeh.common.audit.get_audit_msg_id(env);
+		ELSE 
+			IF NULLIF(InputRoot.MQMD.MsgId,'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ErrorMessage.MessageId = trim_msgid(CAST(InputRoot.MQMD.MsgId as char));
+			ELSE
+				SET OutputRoot.XMLNS.ErrorMessage.MessageId = UNKNOWN_TYPE;		
+			END IF;
+		END IF;		
+
+		IF NULLIF(adesa.aeh.common.audit.get_audit_correl_id(env),'') IS NOT NULL THEN		
+			SET OutputRoot.XMLNS.ErrorMessage.CorrelationId = adesa.aeh.common.audit.get_audit_correl_id(env);
+		ELSE
+			IF NULLIF(InputRoot.MQMD.CorrelId,'') IS NOT NULL THEN			
+				SET OutputRoot.XMLNS.ErrorMessage.CorrelationId = trim_msgid(CAST(InputRoot.MQMD.CorrelId as char));							
+			ELSE
+				SET OutputRoot.XMLNS.ErrorMessage.CorrelationId = UNKNOWN_TYPE;							
+			END IF;			
+		END IF;		
+
+		IF NULLIF(adesa.aeh.common.audit.get_audit_subject(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.Subject = adesa.aeh.common.audit.get_audit_subject(env);
+		ELSE	--default basically there is no corresponding audit to correlate the exception to
+			SET OutputRoot.XMLNS.ErrorMessage.Subject = GEH_SUBJECT;
+		END IF;		
+		--IF NULLIF(Environment.Audit.Header.SourceSystem,'') IS NOT NULL THEN
+		IF NULLIF(adesa.aeh.common.audit.get_audit_source_system(env),'') IS NOT NULL THEN				
+			SET OutputRoot.XMLNS.ErrorMessage.SourceSystem = adesa.aeh.common.audit.get_audit_source_system(env); --_id
+		ELSE
+			IF NULLIF(InputRoot.MQMD.ApplOriginData,'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ErrorMessage.SourceSystem = InputRoot.MQMD.ApplOriginData;	
+			ELSE	
+				SET OutputRoot.XMLNS.ErrorMessage.SourceSystem = UNKNOWN_TYPE;
+			END IF;
+		END IF;	
+		IF NULLIF(adesa.aeh.common.audit.get_audit_source_system_version(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.SourceSystemVersion = adesa.aeh.common.audit.get_audit_source_system_version(env);
+		END IF;
+		
+		
+		IF NULLIF(adesa.aeh.common.audit.get_audit_destination_system(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.DestinationSystem = adesa.aeh.common.audit.get_audit_destination_system(env);
+		---ElSE 
+		--	SET OutputRoot.XMLNS.ErrorMessage.DestinationSystem = UNKNOWN_TYPE;
+			IF NULLIF(adesa.aeh.common.audit.get_audit_destination_system_version(env),'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ErrorMessage.DestinationSystemVersion = adesa.aeh.common.audit.get_audit_destination_system_version(env);
+			END IF;	
+	
+		END IF;	
+		
+		IF NULLIF(adesa.aeh.common.audit.get_audit_project(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.Project = adesa.aeh.common.audit.get_audit_project(env);				
+		END IF;	
+
+		IF NULLIF(adesa.aeh.common.audit.get_audit_service(env),'') IS NOT NULL THEN		
+			SET OutputRoot.XMLNS.ErrorMessage.Service = adesa.aeh.common.audit.get_audit_service(env);
+		ELSE
+			SET OutputRoot.XMLNS.ErrorMessage.Service = SQL.MessageFlowLabel;	
+		END IF;
+			
+		IF NULLIF(Environment.Variables.UserData.Trail,'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.UserData.Trail = Environment.Variables.UserData.Trail;				
+		END IF;	
+		
+		IF NULLIF(Environment.Variables.UserData.Trail,'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.UserData.Trail = Environment.Variables.UserData.Trail;				
+		END IF;				
+		
+		IF NULLIF(Environment.ErrorDetected,'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.ErrorDetected = Environment.ErrorDetected;
+		END IF;
+		 
+	
+		/* Insert original message using XML.CDataSection.. in case special characters are present. */
+		DECLARE textmsgbody CHARACTER;
+		DECLARE isBlob boolean false;
+		DECLARE isAuditMsg boolean false;
+
+		DECLARE ns1 NAMESPACE 'http://www.adesa.com/ihub/common/IHubAuditMsg.xsd';
+		IF noBody THEN
+			SET OutputRoot.XMLNS.ErrorMessage.OriginalMessage = 'No message body';
+		ELSE
+			SET msgbody = X'';
+			IF FIELDNAME(InputRoot.*[<]) = 'BLOB' THEN
+				SET msgbody = InputRoot."BLOB"."BLOB";
+				SET isBlob= true;
+			ELSE
+			    IF NULLIF(InputRoot.MRM.ns1:Subject,'') IS NOT NULL THEN
+					SET isAuditMsg=true;
+			    ELSE			    	
+					SET msgbody = BITSTREAM(InputBody);
+					SET textmsgbody =  CAST(msgbody AS CHAR CCSID 1208);
+			    END IF;
+			END IF;
+
+			IF isBlob THEN	
+				SET OutputRoot.XMLNS.ErrorMessage.OriginalMessage.(XML.CDataSection) = msgbody;
+			ELSE 
+				IF isAuditMsg IS NOT TRUE THEN
+					SET OutputRoot.XMLNS.ErrorMessage.OriginalMessage.(XML.CDataSection) = textmsgbody;
+				ELSE
+					SET OutputRoot.XMLNS.ErrorMessage.OriginalMessage.ns1:AuditMessage=InputBody;
+				END IF;
+			END IF;
+			
+		END IF;
+		
+		/* Insert full exceptionlist tree in msg */
+		IF FIELDNAME(InputExceptionList.*[1]) IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.ExceptionList = InputExceptionList;
+		END IF;
+		
+		/*Insert Generic GEH ERROR CODES DefParserErrCd DefGeneralErrCd DefDbErrCd*/
+		IF NULLIF(Environment.GEH.GeneralErrCd,'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DefGeneralErrCd = Environment.GEH.GeneralErrCd;				
+		ElSE
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DefGeneralErrCd = GEH_DEFAULT_ERROR_CODE;				
+		END IF;	
+		IF NULLIF(Environment.GEH.httpErrCd,'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DefHttpErrCd = Environment.GEH.httpErrCd;				
+		ElSE
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DefHttpErrCd = GEH_DEFAULT_ERROR_CODE;				
+		END IF;	
+		IF NULLIF(Environment.GEH.ParserErrCd,'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DefParserErrCd = Environment.GEH.ParserErrCd;				
+		ELSE
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DefParserErrCd = GEH_DEFAULT_ERROR_CODE;	
+		END IF;	
+		IF NULLIF(Environment.GEH.DbErrCd,'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DefDbErrCd = Environment.GEH.DbErrCd;
+		ELSE
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.DbErrCd = GEH_DEFAULT_ERROR_CODE;
+		END IF;	
+		
+		/*User can set upto  8 User Defined Elements check GEH Documentation-RJ*/
+		DECLARE cnt INT CARDINALITY(Environment.GEH.UDE.*[]);
+		DECLARE I INT 1;
+		WHILE I <= cnt do
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.UDE.NMPair[I].Name =  Environment.GEH.UDE.NMPair[I].Name;
+			SET OutputRoot.XMLNS.ErrorMessage.GEH.UDE.NMPair[I].Value =  Environment.GEH.UDE.NMPair[I].Value;
+			SET I=I+1;
+		END WHILE;
+
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+				
+	CREATE PROCEDURE InitDefaults(INOUT env REFERENCE) BEGIN	
+		CALL set_geh_default_error_codes(env, GEH_GENERAL_EXCEPTION_CD, GEH_PARSER_EXCEPTION_CD, GEH_DATABASE_EXCEPTION_CD);
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+
+	CREATE PROCEDURE CreateMQMDHeader(INOUT env REFERENCE) BEGIN
+			SET OutputRoot.Properties.MessageDomain = 'XMLNS';
+			SET OutputRoot.Properties.MessageFormat='XML1'; 
+				 	 		
+			SET OutputRoot.MQMD.StrucId = MQMD_STRUC_ID;
+			SET OutputRoot.MQMD.Version = MQMD_CURRENT_VERSION;
+			SET OutputRoot.MQMD.CodedCharSetId = 1208; 
+			SET OutputRoot.MQMD.Encoding = 546; 
+			SET OutputRoot.MQMD.Format='XML'; 
+			SET OutputRoot.MQMD.Expiry = -1;
+			SET	OutputRoot.MQMD.Persistence = MQPER_PERSISTENT;
+			
+		    DECLARE tmpcorrelId CHAR;
+		    --handle JMS Input Node
+			IF FIELDNAME (InputRoot.*[2]) = 'HTTPInputHeader' THEN
+		 	 	SET OutputRoot.MQMD.MsgId=InputLocalEnvironment.Destination.HTTP.RequestIdentifier;
+		 	    SET OutputRoot.MQMD.CorrelId=InputLocalEnvironment.Destination.HTTP.RequestIdentifier;	
+		 	    
+   		 	 	IF NULLIF(adesa.aeh.common.audit.get_audit_correl_id(env),'') IS NULL THEN
+   		 	 			SET tmpcorrelId = cast(InputLocalEnvironment.Destination.HTTP.RequestIdentifier as char);			
+		 	 			SET env.Audit.Header.CorrelationId=trim_msgid(tmpcorrelId);		 	 			
+   		 	 	END IF;
+				IF NULLIF(adesa.aeh.common.audit.get_audit_msg_id(env),'') IS NULL THEN			 	 			 	 		
+		 	 		SET env.Audit.Header.MessageId=env.Audit.Header.CorrelationId;		 	 	
+		 	 	END IF;
+		 	 		 			
+		 	 	
+			ELSE  --default
+			 	 	SET env.TEMP.CorrelId=MQCI_NEW_SESSION;
+		 	 		SET OutputRoot.MQMD.CorrelId=env.TEMP.CorrelId;
+		 	 		SET OutputRoot.MQMD.MsgId=env.TEMP.CorrelId;
+			 		IF NULLIF(adesa.aeh.common.audit.get_audit_correl_id(env),'') IS NULL THEN			 	 	
+		 	 			SET tmpcorrelId = cast(Environment.TEMP.CorrelId as char);
+		 	 			SET env.Audit.Header.CorrelationId=trim_msgid(tmpcorrelId);
+		 	 		END IF;
+		 	 		IF NULLIF(adesa.aeh.common.audit.get_audit_msg_id(env),'') IS NULL THEN			 	 			 	 		
+		 	 			SET tmpcorrelId = cast(Environment.TEMP.CorrelId as char);
+						SET env.Audit.Header.MessageId=trim_msgid(tmpcorrelId);
+		 	 		END IF;
+		 	 			 	 	
+		    END IF;
+	END;		
+
+END MODULE;
+	
+CREATE FILTER MODULE error_handler_subflow_filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN 
+    BEGIN
+    	IF Root.MQMD.BackoutCount > 0 THEN
+        	RETURN TRUE; /* this is the result of rollback generated in error handling */
+        ELSEIF ExceptionList.RecoverableException.UserException.Number IS NOT NULL AND 
+         ExceptionList.RecoverableException.UserException.Number = 3049 THEN
+            RETURN TRUE; /* this is the result of throw in error handling */
+        ELSEIF ExceptionList.RecoverableException.Number = 3910 OR ExceptionList.RecoverableException.RecoverableException.Number = 3910 THEN
+            RETURN TRUE;
+        ELSE
+            RETURN FALSE; 
+		END IF;
+	END;
+END MODULE;
+
+CREATE FILTER MODULE comlux_error_handler_subflow_mainline_filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+
+		IF Root.MQMD.BackoutCount = 0 THEN
+			RETURN TRUE;
+		ELSE 
+			IF Root.JMSTransport IS NOT NULL THEN
+				RETURN TRUE;
+			ELSE
+				RETURN FALSE;
+			END IF;
+		END IF;
+	END;
+
+END MODULE;
+
+-- not used by try catch
+--used to generate warning/error message to geh by setting geh errorcode with set_geh_exception_code
+--This requires exception code be set ahead with set_geh_exception_code(), set_error_text()
+--set_child_error_code if needed if using this procedure set_geh_child_exception_code
+--rename ?
+CREATE COMPUTE MODULE error_handler_generate_geh_exception_with_error_cd_text
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage();
+		DECLARE env REFERENCE TO Environment;
+		SET OutputRoot.MQMD.CodedCharSetId = 1208; 
+		SET OutputRoot.MQMD.Encoding = 546; 
+
+		SET OutputRoot.MQMD.Format=MQFMT_STRING;
+		SET OutputRoot.MQMD.Expiry = -1;
+		--SET	OutputRoot.MQMD.Persistence = 0;
+		SET OutputRoot.Properties.MessageDomain = 'MRM';
+		
+		--Defining the Message Set, Type and Format for the output message
+		SET OutputRoot.Properties.MessageSet='GEH_MessageSet';
+		SET OutputRoot.Properties.MessageType='ExceptionMessage';
+		SET OutputRoot.Properties.MessageFormat='XML1'; 
+		SET OutputRoot.MRM.ns:exceptionCode=get_geh_exception_code(env);
+		SET OutputRoot.MRM.ns:subject=adesa.aeh.common.audit.get_audit_subject(env); 
+		SET OutputRoot.MRM.ns:dateTimestamp=CURRENT_TIMESTAMP;
+		
+		--TODO- verify this code (should be good)
+		DECLARE msgid CHAR;
+		DECLARE msgcid CHAR;
+		
+		SET msgid = cast(adesa.aeh.common.audit.get_audit_msg_id(env) as char);
+		SET msgcid = cast(adesa.aeh.common.audit.get_audit_correl_id(env) as char);
+				
+		IF NULLIF(msgid, '') IS NOT NULL THEN
+			SET OutputRoot.MRM.ns:origination.ns:systemId= msgid || GEH_DELIMITER || adesa.aeh.common.audit.get_audit_status(env);
+		ELSE			
+			SET msgid = cast(InputRoot.MQMD.MsgId as char); --CorrelId
+			SET OutputRoot.MRM.ns:origination.ns:systemId=trim_msgid(msgid) || GEH_DELIMITER || adesa.aeh.common.audit.get_audit_status(env);
+		END IF; 
+		
+		IF NULLIF(adesa.aeh.common.audit.get_audit_source_system(env),'') IS NOT NULL THEN			
+			SET OutputRoot.MRM.ns:origination.ns:systemName=adesa.aeh.common.audit.get_audit_source_system(env);--Environment.Audit.SourceSystem;
+		ELSE			
+			SET OutputRoot.MRM.ns:origination.ns:systemName=adesa.aeh.common.audit.get_audit_source_system_id(env);
+		END IF;
+		
+		IF NULLIF(adesa.aeh.common.audit.get_audit_source_system_version(env),'') IS NOT NULL THEN			
+			SET OutputRoot.MRM.ns:origination.ns:systemVersion=adesa.aeh.common.audit.get_audit_source_system_version(env);
+		END IF;
+--		02/26
+		IF NULLIF(adesa.aeh.common.audit.get_audit_correl_id(env),'') IS NOT NULL THEN			 	 	
+			SET OutputRoot.MRM.ns:conversationId=adesa.aeh.common.audit.get_audit_correl_id(env);
+		ELSE
+     		SET msgcid = cast(InputRoot.MQMD.CorrelId as char);
+			SET OutputRoot.MRM.ns:conversationId=trim_msgid(msgcid);
+		END IF;
+		--added common 02/26
+		IF NULLIF(msgid, '') IS NOT NULL THEN
+			SET OutputRoot.MRM.ns:common.ns:systemId=msgid || GEH_DELIMITER || adesa.aeh.common.audit.get_audit_status(env);
+		ELSE
+			SET msgid = cast(InputRoot.MQMD.MsgId as char);
+			SET OutputRoot.MRM.ns:common.ns:systemId= trim_msgid(msgid) || adesa.aeh.common.audit.get_audit_status(env);
+		END IF;
+		
+		SET OutputRoot.MRM.ns:common.ns:systemName=GEH_COMMON_SYSTEM_NAME;
+		SET OutputRoot.MRM.ns:common.ns:systemVersion=GEH_COMMON_SYSTEM_VERSION; --defaulted here 
+		
+
+		DECLARE J INT 1;		
+		
+		IF NULLIF (get_error_text(env),'') IS NOT NULL THEN
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:name=CUSTOM_TEXT;
+			--getGEHErrorString
+			-- set to geh error cd-done
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:value='Exception occured on Broker:' || SQL.BrokerName || ':' || SQL.MessageFlowLabel || ' ' || get_error_text(env); --adesa.aeh.common.error.get_geh_exception_code(env);			
+		END IF;
+		--developer adds  CHILD exception code with set_geh_child_exception_code
+		--should be part of udes in this case
+		--add the geh udes
+		
+		DECLARE cnt INT CARDINALITY(Environment.GEH.UDE.*[]);
+		Declare idx integer 1;
+		WHILE idx <= cnt do		
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:name=Environment.GEH.UDE.NMPair[idx].Name;
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:value=Environment.GEH.UDE.NMPair[idx].Value;
+			SET idx = idx + 1;	
+			SET J = J + 1;				
+		END WHILE;
+				
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+---start module 12/2008
+
+CREATE COMPUTE MODULE error_handler_transform_common_to_geh_exception
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+		-- CALL CopyEntireMessage(); 
+		CALL transformException();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE transformException() BEGIN
+		DECLARE inref REFERENCE TO InputRoot.XMLNS;
+		DECLARE env REFERENCE TO Environment;
+		DECLARE locenv REFERENCE TO OutputLocalEnvironment;
+		DECLARE iplocenv REFERENCE TO InputLocalEnvironment;
+		DECLARE exceptionType CHAR;
+		DECLARE exceptionPath CHAR;
+		DECLARE exceptionString CHAR;
+		--DECLARE isUE boolean false;
+		DECLARE errorType INTEGER 0;
+		SET OutputRoot.MQMD.CodedCharSetId = 1208; 
+		SET OutputRoot.MQMD.Encoding = 546; 
+		SET OutputRoot.MQMD.Format=MQFMT_STRING;
+		SET OutputRoot.Properties.MessageDomain = 'MRM';
+		--Defining the Message Set, Type and Format for the output message
+		SET OutputRoot.Properties.MessageSet='GEH_MessageSet';
+		SET OutputRoot.Properties.MessageType='ExceptionMessage';
+		SET OutputRoot.Properties.MessageFormat='XML1';
+		DECLARE envAudit CHARACTER env.Audit.Header.Subject; 
+		--getExceptionTypePath and getGEHErrorCode									
+		CALL get_exception_type_path(inref, errorType, exceptionPath);
+				
+		DECLARE gehErrorCd CHAR; 
+
+		--SET gehErrorCd=get_geh_error_code(inref, errorType);
+		SET locenv.TEMP.XMLNS = InputRoot.XMLNS;
+		DECLARE uePathRef REFERENCE TO locenv.TEMP.XMLNS;
+		SET gehErrorCd=get_geh_error_code2(inref, errorType, uePathRef);
+		SET OutputRoot.MRM.ns:exceptionCode = gehErrorCd;
+		--Handle diff between Java and esql
+		IF errorType = USER_EXCEPTION_TYPE THEN
+			CALL set_user_error_details(uePathRef, errorType, locenv);			
+			IF NULLIF(get_ue_app_subject(locenv),'') IS NOT NULL THEN
+					SET OutputRoot.MRM.ns:subject=get_ue_app_subject(locenv);
+			ELSE
+				IF NULLIF(adesa.aeh.common.audit.get_audit_subject(env),'') IS NOT NULL THEN
+					SET OutputRoot.MRM.ns:subject=adesa.aeh.common.audit.get_audit_subject(env);
+				ELSE
+					SET OutputRoot.MRM.ns:subject=GEH_SUBJECT;
+				END IF;
+				
+			END IF;
+		ELSE --non user
+					SET OutputRoot.MRM.ns:subject=InputRoot.XMLNS.ErrorMessage.Subject;			
+		END IF;		
+         
+	    SET OutputRoot.MRM.ns:dateTimestamp=CURRENT_TIMESTAMP;
+		IF NULLIF(adesa.aeh.common.audit.get_audit_status(env),'') IS NOT NULL THEN
+			--SET OutputRoot.MRM.ns:origination.ns:systemId=get_errmsg_msg_id(inref) || get_geh_delimiter(env) || adesa.aeh.common.audit.get_audit_recieved_status();
+			SET OutputRoot.MRM.ns:origination.ns:systemId=InputRoot.XMLNS.ErrorMessage.MessageId || get_geh_delimiter(env) || adesa.aeh.common.audit.get_audit_status(env);
+		ELSE 
+			SET OutputRoot.MRM.ns:origination.ns:systemId=InputRoot.XMLNS.ErrorMessage.MessageId || get_geh_delimiter(env) || adesa.aeh.common.audit.get_audit_recieved_status();
+		END IF;
+		IF NULLIF(InputRoot.XMLNS.ErrorMessage.SourceSystem,'') IS NOT NULL THEN	
+			SET OutputRoot.MRM.ns:origination.ns:systemName=InputRoot.XMLNS.ErrorMessage.SourceSystem;
+		ELSE 
+			SET OutputRoot.MRM.ns:origination.ns:systemName=UNKNOWN_TYPE;			
+		END IF;
+		
+		IF NULLIF(InputRoot.XMLNS.ErrorMessage.SourceSystemVersion,'') IS NOT NULL THEN	
+			SET OutputRoot.MRM.ns:origination.ns:systemVersion=InputRoot.XMLNS.ErrorMessage.SourceSystemVersion;
+		--ELSE --no default
+		--	SET OutputRoot.MRM.ns:origination.ns:systemVersion=GEH_SRC_SYSTEM_VERSION;			
+		END IF;
+		
+		SET OutputRoot.MRM.ns:conversationId=InputRoot.XMLNS.ErrorMessage.CorrelationId; 
+		IF NULLIF(adesa.aeh.common.audit.get_audit_status(env),'') IS NULL THEN		
+--			SET OutputRoot.MRM.ns:common.ns:systemId= get_errmsg_msg_id(inref) || get_geh_delimiter(env) || adesa.aeh.common.audit.get_audit_recieved_status();
+			SET OutputRoot.MRM.ns:common.ns:systemId= InputRoot.XMLNS.ErrorMessage.MessageId || get_geh_delimiter(env) || adesa.aeh.common.audit.get_audit_recieved_status();
+		ELSE
+			SET OutputRoot.MRM.ns:common.ns:systemId= InputRoot.XMLNS.ErrorMessage.MessageId || get_geh_delimiter(env) || adesa.aeh.common.audit.get_audit_status(env);
+		END IF;
+		SET OutputRoot.MRM.ns:common.ns:systemName=GEH_COMMON_SYSTEM_NAME;
+		SET OutputRoot.MRM.ns:common.ns:systemVersion=GEH_COMMON_SYSTEM_VERSION; --defaulted here 
+		
+		DECLARE J INT 1;	
+		DECLARE errorText CHAR;	
+		SET OutputRoot.MRM.ns:userDefinedElements[J].ns:name=CUSTOM_TEXT;
+		--getGEHErrorString				
+		IF errorType = USER_EXCEPTION_TYPE THEN
+			SET errorText='Exception occured on Broker:' || SQL.BrokerName; 
+			SET errorText= errorText || ':' || SQL.MessageFlowLabel ;
+			IF NULLIF (InputRoot.XMLNS.ErrorMessage.ExceptionList.RecoverableException.Label,'')IS NOT NULL THEN
+				SET errorText= errorText ||  ':' ||  InputRoot.XMLNS.ErrorMessage.ExceptionList.RecoverableException.Label || ' node ';
+			END IF;
+
+			IF NULLIF(get_ue_mod_name(locenv),'') IS NOT NULL THEN
+				SET errorText= errorText || ' in module ' || get_ue_mod_name(locenv) || ': ';
+			END IF;
+
+			IF NULLIF(get_ue_exception_details(locenv),'') IS NOT NULL THEN
+				SET errorText= errorText  || get_ue_exception_details(locenv); 
+			END IF;
+
+			IF NULLIF(get_ue_user_trace(locenv),'') IS NOT NULL THEN
+				SET errorText= errorText || ' ' || get_ue_user_trace(locenv);
+			END IF;			
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:value=errorText;
+		    IF NULLIF(get_ue_user_child_error_cd(locenv),'') IS NOT NULL THEN		    
+		    	SET J=J+1;
+				SET OutputRoot.MRM.ns:userDefinedElements[J].ns:name=CHILD_TEXT;
+				SET OutputRoot.MRM.ns:userDefinedElements[J].ns:value=get_ue_user_child_error_cd(locenv);
+		    END IF;
+		ELSE
+			SET exceptionString = get_geh_error_string(inref, errorType,exceptionPath);
+			CALL set_error_text(env, exceptionString);
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:value='Exception occured on Message Broker:' || SQL.BrokerName || ':' || SQL.MessageFlowLabel || '  ' || exceptionString;			
+		END IF;
+		--For Non UE CHILD Exception should be set with set_child_error_code procedure->set_geh_child_exception_code	
+       
+        --GEH search filed add 
+         IF (envAudit <> '' OR envAudit IS NOT NULL)THEN
+			SET J=J+1;
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:name = 'AUDIT_SUBJECT';
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:value = envAudit;
+		END IF;
+          -- End of change
+		DECLARE cnt INT CARDINALITY(InputRoot.XMLNS.ErrorMessage.GEH.UDE.*[]);
+		DECLARE I INT 1;
+		SET J=J+1;
+		WHILE I <= cnt do		
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:name=InputRoot.XMLNS.ErrorMessage.GEH.UDE.NMPair[I].Name;
+			SET OutputRoot.MRM.ns:userDefinedElements[J].ns:value=InputRoot.XMLNS.ErrorMessage.GEH.UDE.NMPair[I].Value;
+			SET I=I+1;		
+			SET J=J+1;
+		END WHILE;
+
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+
+---end
+
+
+---more common functions for hub pilot:) RJ
+--getUETypeCd User Exception
+Create Function get_ue_type_cd() RETURNS INTEGER
+Begin
+		return USER_EXCEPTION_TYPE;		
+END;
+
+--getDBETypeCd DB Exception
+Create Function get_dbe_type_cd() RETURNS INTEGER
+Begin
+	return DATABASE_EXCEPTION_TYPE;		
+END;
+
+--getPETypeCd Returns Parser Exception type Code
+Create Function get_pe_type_cd() RETURNS INTEGER
+Begin
+	return PARSER_EXCEPTION_TYPE;		
+END;
+
+--Returns Parser Conversion Exception type Code
+Create Function get_pec_type_cd() RETURNS INTEGER
+Begin
+	return PARSER_CONVERSION_EXCEPTION_TYPE;		
+END;
+
+--getGETypeCd Returns General Exception type Code
+Create Function get_ge_type_cd() RETURNS INTEGER
+Begin
+	return GENERAL_EXCEPTION_TYPE;		
+END;
+
+Create Function get_me_type_cd() RETURNS INTEGER
+Begin
+	return MESSAGE_EXCEPTION_TYPE;		
+END;
+
+--getGEHDefaultErrCd returns default error code
+Create Function get_geh_default_err_cd(IN ref REFERENCE) RETURNS 
+CHAR
+Begin
+	return GEH_DEFAULT_ERROR_CODE;
+End;
+
+Create Function get_geh_delimiter(IN ref REFERENCE) RETURNS 
+CHAR
+Begin
+	return GEH_DELIMITER;
+End;
+
+CREATE FUNCTION  checkNumeric( IN intStr CHARACTER )
+ 	RETURNS CHARACTER
+    BEGIN
+  		declare intVal integer;  		
+  		SET intVal = CAST(intStr as INTEGER DEFAULT 0);
+        if (intVal = 0) then
+        	SET intStr = '0';        	        	
+        end if;
+        return intStr;
+    End;
+
+
+--getExceptionTypePath Identifies exception type and path to the type
+Create Procedure get_exception_type_path(IN ref REFERENCE, INOUT exceptionType INTEGER,INOUT exceptionPath CHAR) 
+Begin
+
+	DECLARE  Path CHARACTER;
+	DECLARE fieldNm CHARACTER;
+	DECLARE fieldVal CHAR;
+	DECLARE found BOOLEAN false;
+	SET Path = 'ref.ErrorMessage.ExceptionList.*[1]';		 
+	
+	WHILE EVAL( 'FIELDNAME(' || Path || ') IS NOT NULL' ) DO			
+		SET fieldNm = EVAL( 'FIELDNAME(' || Path ||')');
+		SET fieldVal = EVAL( Path||'.Function');									
+		IF (fieldNm = USER_EXCEPTION AND found=false) THEN
+			SET exceptionType=USER_EXCEPTION_TYPE;
+			SET exceptionPath = Path;
+			SET found=true;
+		END IF;
+		IF (fieldNm = DATABASE_EXCEPTION AND found=false) THEN
+			SET exceptionType=DATABASE_EXCEPTION_TYPE;
+			SET exceptionPath = Path;			
+			SET found=true;
+		END IF;
+		--search for all socket exceptions
+		IF (CONTAINS(fieldNm,HTTP_EXCEPTION) AND found=false) THEN 
+			SET exceptionType=HTTP_EXCEPTION_TYPE;
+			SET exceptionPath = Path;			
+			SET found=true;
+		END IF;
+		--search for soap exceptions
+		IF fieldVal = 'ImbSOAPRequestNode::requestData' THEN
+			SET exceptionType=HTTP_EXCEPTION_TYPE;
+			SET exceptionPath = Path;			
+			SET found=true;
+		END IF;
+		IF (fieldNm = PARSER_EXCEPTION AND found=false) THEN
+			SET exceptionType=PARSER_EXCEPTION_TYPE;
+			SET exceptionPath = Path;			
+			SET found=true;
+		END IF;		
+		
+		IF (fieldNm = PARSER_CONVERSION_EXCEPTION AND found=false) THEN
+			SET exceptionType=PARSER_CONVERSION_EXCEPTION_TYPE;
+			SET exceptionPath = Path;			
+			SET found=true;
+		END IF;	
+
+		IF (fieldNm = MESSAGE_EXCEPTION AND found=false) THEN
+			SET exceptionType=GENERAL_EXCEPTION_TYPE;
+			SET exceptionPath = Path;			
+			SET found=true;
+		END IF;	
+			
+		SET Path = Path || '.*[<]';
+	END WHILE; -- End While loop
+	
+	IF found=false then --recoverable
+		SET exceptionType=GENERAL_EXCEPTION_TYPE;
+		SET exceptionPath = 'ref.ErrorMessage.ExceptionList.*[1]';						
+	END IF;
+		
+END;
+
+--getGEHErrorString
+--internally used
+Create Function get_geh_error_string(IN ref REFERENCE, IN errorType INTEGER, IN path CHAR) RETURNS CHAR
+Begin
+	
+	DECLARE fieldNm CHARACTER;
+	DECLARE gehErrorString CHARACTER;
+	DECLARE len integer;
+
+	IF errorType = USER_EXCEPTION_TYPE THEN
+		--find the GEH exception Number set by user 
+		DECLARE countI INT CARDINALITY(ref.ErrorMessage.ExceptionList.RecoverableException.RecoverableException.Insert[]);
+		SET gehErrorString = ref.ErrorMessage.ExceptionList.RecoverableException.RecoverableException.Insert[countI].Text;
+	ELSE
+		SET gehErrorString = get_non_user_exception_string(ref, errorType, path);
+	END IF; --end isue	    
+
+    IF  ref.ErrorMessage.UserData.Trail IS NOT NULL THEN
+    	SET gehErrorString = gehErrorString || ':UserTrail=' || ref.ErrorMessage.UserData.Trail;
+    END IF;
+    
+	if (gehErrorString = null) then return ' '; end if;
+		
+	return gehErrorString;
+	
+END;
+
+--getNonUserExceptionString
+Create Function get_non_user_exception_string(IN ref REFERENCE, IN exceptionType INTEGER, IN Path CHAR) RETURNS 
+CHAR
+Begin
+
+	DECLARE lePath CHARACTER;
+	DECLARE fieldNm CHARACTER;
+	DECLARE exceptionString CHARACTER 'Exception Trace: Error occured on '; --Message Broker:' || SQL.BrokerName || ' ' 
+	    SET exceptionString= exceptionString ||  ref.ErrorMessage.ExceptionList.RecoverableException.Label || ' node ';
+	    WHILE EVAL( 'FIELDNAME(' || Path || ') IS NOT NULL' ) DO
+			IF EVAL( 'FIELDNAME(' || Path || '.Text) IS NOT NULL' ) THEN				
+				SET exceptionString = exceptionString  || ':Text=' || EVAL( Path || '.Text' );
+			END IF;	
+			/* Step to last child of current element (usually a nested exception list */
+			SET Path = Path || '.*[<]';
+		END WHILE; /* End loop */
+		
+	return exceptionString;
+		
+END;
+
+--getNonUserFullExceptionString
+Create Function get_non_user_full_exception_string(IN ref REFERENCE, IN exceptionType INTEGER) RETURNS 
+CHAR
+Begin
+
+	DECLARE lePath CHARACTER;
+	DECLARE fieldNm CHARACTER;
+	DECLARE  Path CHARACTER;
+	SET Path = 'ref.ErrorMessage.ExceptionList.*[1]';
+	DECLARE exceptionString CHARACTER ' Full Exception Trace';
+		--SET exceptionString= exceptionString ||  ref.ErrorMessage.ExceptionList.RecoverableException.Label || ' node ';
+		WHILE EVAL( 'FIELDNAME(' || Path || ') IS NOT NULL' ) DO
+			IF EVAL( 'FIELDNAME(' || Path || '.Text) IS NOT NULL' ) THEN				
+				SET exceptionString = exceptionString  || ':Text=' || EVAL( Path || '.Text' );
+			END IF;	
+			/* Step to last child of current element (usually a nested exception list */
+			SET Path = Path || '.*[<]';
+		END WHILE; /* End loop */
+	
+						
+	return exceptionString;
+		
+END;
+
+--procedure for setting USER Exceptions -- internal use
+CREATE PROCEDURE set_ue_error_cd(INOUT env REFERENCE, IN val CHAR) BEGIN		
+		SET env.Error.UE.GehErrorCd=val;
+End;
+
+CREATE PROCEDURE set_ue_app_subject(INOUT env REFERENCE, IN val CHAR) BEGIN		
+		SET env.Error.UE.AppSubjectName=val;
+End;
+
+CREATE PROCEDURE set_ue_mod_name(INOUT env REFERENCE, IN val CHAR) BEGIN		
+		SET env.Error.UE.ModName=val;
+End;
+
+CREATE PROCEDURE set_ue_exception_details(INOUT env REFERENCE, IN val CHAR) BEGIN		
+		SET env.Error.UE.ExceptionDetails=val;
+End;
+
+CREATE PROCEDURE set_ue_user_trace1(INOUT env REFERENCE, IN val CHAR) BEGIN		
+		SET env.Error.UE.UserTrace1=val;
+End;
+
+CREATE PROCEDURE set_ue_user_trace2(INOUT env REFERENCE, IN val CHAR) BEGIN		
+		SET env.Error.UE.UserTrace2=val;
+End;
+
+CREATE PROCEDURE set_ue_child_error_cd(INOUT env REFERENCE, IN val CHAR) BEGIN		
+		SET env.Error.UE.GehChildErrorCd=val;
+		
+End;
+
+
+Create Function get_ue_error_cd(IN env REFERENCE) RETURNS CHAR
+Begin
+	return env.Error.UE.GehErrorCd;
+End;
+
+Create Function get_ue_user_child_error_cd(IN env REFERENCE) RETURNS CHAR
+Begin
+	return env.Error.UE.GehChildErrorCd;
+End;			
+
+Create Function get_ue_exception_details(IN env REFERENCE) RETURNS CHAR
+Begin
+	return env.Error.UE.ExceptionDetails;
+End;			
+
+
+Create Function get_ue_mod_name(IN env REFERENCE) RETURNS CHAR
+Begin
+	return env.Error.UE.ModName;
+End;			
+
+Create Function get_ue_user_trace(IN env REFERENCE) RETURNS CHAR
+Begin
+	DECLARE result CHARACTER ' ';
+	IF env.Error.UE.UserTrace1 IS NOT NULL THEN
+		SET result = env.Error.UE.UserTrace1;
+	END IF;
+	IF env.Error.UE.UserTrace2 IS NOT NULL THEN
+		SET result = result || ' ' ||  env.Error.UE.UserTrace2;
+	END IF;
+	
+	return result;
+End;			
+
+CREATE Function get_ue_app_subject(IN env REFERENCE) RETURNS CHAR		
+Begin
+		return env.Error.UE.AppSubjectName;
+End;
+
+Create PROCEDURE set_user_error_details(IN ref REFERENCE, IN errorType INTEGER, INOUT env REFERENCE) 
+Begin
+	
+	DECLARE fieldNm CHARACTER;
+	DECLARE gehErrorCd CHARACTER;
+	DECLARE len integer;
+	DECLARE pos integer;
+	
+	IF errorType = USER_EXCEPTION_TYPE THEN
+		--find the GEH exception Number set by user
+				--APP_SUBJECT_NAME
+				--CHILD_EXCEPTION_CD
+				--EXCEPTION_DETAILS
+				--USER_TRACE_1-2
+--		FOR source AS ref.UserException.Insert[] DO
+		FOR source AS ref.Insert[] DO
+			SET len = LENGTH(source.Text);
+			SET pos = POSITION('=' in source.Text);
+			--TODO add the GEH_ERROR_CODE to the documentation as a 1st param
+			IF len > GEH_ERROR_CODE_LEN AND GEH_ERROR_CODE = SUBSTRING(source.Text FROM 1 FOR GEH_ERROR_CODE_LEN) THEN --IF 1
+				CALL set_ue_error_cd(env, SUBSTRING(source.Text FROM GEH_ERROR_CODE_LEN + 2 FOR len));				
+			ELSE
+			IF len > APP_SUBJECT_NAME_LEN AND APP_SUBJECT_NAME = SUBSTRING(source.Text FROM 1 FOR APP_SUBJECT_NAME_LEN) THEN  --IF 2
+				CALL set_ue_app_subject(env, SUBSTRING(source.Text FROM APP_SUBJECT_NAME_LEN + 2 FOR len));
+			ELSE ---add MOD_NAME=
+			IF len > MOD_NAME_LEN AND MOD_NAME = SUBSTRING(source.Text FROM 1 FOR MOD_NAME_LEN) THEN --IF 3					
+				CALL set_ue_mod_name(env, SUBSTRING(source.Text FROM MOD_NAME_LEN + 2 FOR len));				
+			ELSE
+			IF len > EXCEPTION_DETAILS_LEN AND EXCEPTION_DETAILS = SUBSTRING(source.Text FROM 1 FOR EXCEPTION_DETAILS_LEN) THEN --IF 3					
+				CALL set_ue_exception_details(env, SUBSTRING(source.Text FROM EXCEPTION_DETAILS_LEN + 2 FOR len));				
+			ELSE
+			IF len > USER_TRACE_LEN  AND USER_TRACE_1 = SUBSTRING(source.Text FROM 1 FOR USER_TRACE_LEN) THEN--IF 4				
+				CALL set_ue_user_trace1(env, SUBSTRING(source.Text FROM USER_TRACE_LEN + 2 FOR len));
+			ELSE
+			IF len > USER_TRACE_LEN AND USER_TRACE_2 = SUBSTRING(source.Text FROM 1 FOR USER_TRACE_LEN) THEN--IF 5
+				CALL set_ue_user_trace2(env, SUBSTRING(source.Text FROM USER_TRACE_LEN + 2 FOR len));
+			ELSE
+			IF len > CHILD_EXCEPTION_CD_LEN AND CHILD_EXCEPTION_CD = SUBSTRING(source.Text FROM 1 FOR CHILD_EXCEPTION_CD_LEN) THEN --IF 6
+				CALL set_ue_child_error_cd(env, SUBSTRING(source.Text FROM CHILD_EXCEPTION_CD_LEN + 2 FOR len));
+						
+			END IF; --IF 6									
+			END IF; --IF 5					
+			END IF; --IF 4	
+			END IF; --IF 3							
+			END IF; --IF 2				
+			END IF; --IF 2				
+			END IF; --IF 1			
+		END FOR;
+	END IF; 	   
+
+End;
+
+Create Function get_geh_error_code2(IN ref REFERENCE, IN errorType INTEGER, INOUT uePath REFERENCE) RETURNS CHAR
+Begin
+	
+	DECLARE fieldNm CHARACTER;
+	DECLARE gehErrorCd CHARACTER;
+	DECLARE tmpfnm CHAR;
+	DECLARE len integer;
+	DECLARE found BOOLEAN false;
+	
+	IF errorType = USER_EXCEPTION_TYPE THEN
+		--find the GEH exception Number set by user
+		--declare myref REFERENCE TO ref.ErrorMessage.ExceptionList.*[1];
+		declare myref REFERENCE TO ref.ErrorMessage.ExceptionList.*[1];
+		WHILE (myref.Number IS NOT NULL and not found) do
+			IF FIELDNAME(myref) = USER_EXCEPTION THEN				
+		    	FOR source AS myref.Insert[] DO
+					SET len = LENGTH(source.Text); 
+					IF len > GEH_ERROR_CODE_LEN THEN
+						IF GEH_ERROR_CODE = SUBSTRING(source.Text FROM 1 FOR GEH_ERROR_CODE_LEN) THEN
+							SET gehErrorCd=SUBSTRING(source.Text FROM GEH_ERROR_CODE_LEN + 2 FOR len);						
+							SET found=true;
+							SET uePath=myref;
+						END IF;				
+					END IF;			
+				END FOR;	        
+			END IF;
+			MOVE myref LASTCHILD;
+		END WHILE; 
+	END IF; 	   
+	
+	IF EVAL( 'FIELDNAME(ref.ErrorMessage.GEH.*[1]) IS NOT NULL' ) THEN			
+		IF errorType = PARSER_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefParserErrCd;	
+		END IF;
+	
+		IF errorType = PARSER_CONVERSION_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefParserErrCd;	
+		END IF;
+	
+	
+		IF errorType = GENERAL_EXCEPTION_TYPE  OR errorType = MESSAGE_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefGeneralErrCd;	
+		END IF;
+	
+		IF errorType = DATABASE_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefDbErrCd;	
+		END IF;
+		
+		IF errorType = HTTP_EXCEPTION_TYPE THEN 
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefHttpErrCd;	
+		END IF;
+
+	END IF;
+	
+	if (gehErrorCd = null) then return GEH_DEFAULT_ERROR_CODE; end if;
+	
+	return gehErrorCd;	
+END;
+
+-------
+
+--getGEHErrorCode
+--deprecated
+Create Function get_geh_error_code(IN ref REFERENCE, IN errorType INTEGER) RETURNS CHAR
+Begin
+	
+	DECLARE fieldNm CHARACTER;
+	DECLARE gehErrorCd CHARACTER;
+	DECLARE len integer;
+	IF errorType = USER_EXCEPTION_TYPE THEN
+		--find the GEH exception Number set by user
+	   IF FIELDTYPE(ref.ErrorMessage.ExceptionList.RecoverableException.UserException.UserException) IS NULL THEN 		
+	    FOR source AS ref.ErrorMessage.ExceptionList.RecoverableException.RecoverableException.UserException.Insert[] DO
+			SET len = LENGTH(source.Text);
+			--TODO add the GEH_ERROR_CODE to the documentation as a 1st param
+			IF len > GEH_ERROR_CODE_LEN THEN
+				IF GEH_ERROR_CODE = SUBSTRING(source.Text FROM 1 FOR GEH_ERROR_CODE_LEN) THEN
+					SET gehErrorCd=SUBSTRING(source.Text FROM GEH_ERROR_CODE_LEN + 2 FOR len);						
+				END IF;				
+			END IF;			
+		END FOR;
+	        
+	   ELSE --to handle diff between java and esql exceptions (thanks to IBM)		
+		FOR source AS ref.ErrorMessage.ExceptionList.RecoverableException.UserException.UserException.Insert[] DO
+			SET len = LENGTH(source.Text);
+			IF len > GEH_ERROR_CODE_LEN THEN
+				IF GEH_ERROR_CODE = SUBSTRING(source.Text FROM 1 FOR GEH_ERROR_CODE_LEN) THEN
+					SET gehErrorCd=SUBSTRING(source.Text FROM GEH_ERROR_CODE_LEN + 2 FOR len);						
+				END IF;				
+			END IF;			
+		END FOR;
+		END IF;
+	END IF; 	   
+	
+	IF EVAL( 'FIELDNAME(ref.ErrorMessage.GEH.*[1]) IS NOT NULL' ) THEN			
+		IF errorType = PARSER_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefParserErrCd;	
+		END IF;
+	
+		IF errorType = PARSER_CONVERSION_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefParserErrCd;	
+		END IF;
+		
+		IF errorType = HTTP_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.httpErrCd;	
+		END IF;
+	
+	
+		IF errorType = GENERAL_EXCEPTION_TYPE  OR errorType = MESSAGE_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefGeneralErrCd;	
+		END IF;
+	
+		IF errorType = DATABASE_EXCEPTION_TYPE THEN
+			SET gehErrorCd=ref.ErrorMessage.GEH.DefDbErrCd;	
+		END IF;
+
+	END IF;
+	
+	if (gehErrorCd = null) then return GEH_DEFAULT_ERROR_CODE; end if;
+	
+	return gehErrorCd;	
+END;
+
+/*All Flows making use of Common Error Handler and GEH should use these function (typically in the received audit or first esql procedure invoked) for reporting errors to GEH-Ravi*/
+CREATE PROCEDURE set_geh_default_error_codes(INOUT environment REFERENCE, IN generalErrCd CHAR, IN parserErrCd CHAR, IN dbErrCd CHAR) BEGIN		
+	if generalErrCd is NOT NULL then
+		SET environment.GEH.GeneralErrCd = generalErrCd;
+	ELSE 
+		SET environment.GEH.GeneralErrCd = GEH_DEFAULT_ERROR_CODE;
+	end if;
+					
+	if parserErrCd is NOT NULL then
+		SET environment.GEH.ParserErrCd = parserErrCd;
+	ELSE
+		SET environment.GEH.ParserErrCd = GEH_DEFAULT_ERROR_CODE;
+	end if;
+	
+	--if dbErrCd is NOT NULL then
+	if dbErrCd is NOT NULL and dbErrCd <> GEH_DEFAULT_ERROR_CODE then
+		SET environment.GEH.DbErrCd = dbErrCd;
+	--ELSE
+	--	SET environment.GEH.DbErrCd = GEH_DEFAULT_ERROR_CODE;		
+	end if;		
+END;
+
+/*All Flows making use of Common Error Handler and GEH can make use of this to set custom User Defined Elements (UDE) to pass to GEH-Ravi*/
+CREATE PROCEDURE set_geh_UDE(INOUT environment REFERENCE, IN name CHAR, IN value CHAR) BEGIN		
+		
+		DECLARE cnt INT CARDINALITY(environment.GEH.UDE.NMPair[]);
+		IF CARDINALITY(environment.GEH.UDE.NMPair[]) > 0  THEN
+			SET cnt=cnt + 1;
+		ELSE 
+			SET cnt=1;
+		END IF;
+		if name is NOT NULL then
+			SET environment.GEH.UDE.NMPair[cnt].Name = name;
+			SET environment.GEH.UDE.NMPair[cnt].Value = value;
+		end if;
+		
+END;
+
+/*All Flows making use of Common Error Handler and GEH can make use of this to set custom User Defined Elements (UDE) to pass to GEH-Ravi*/
+--recommended method() to use over set_geh_UDE.
+CREATE PROCEDURE set_geh_UDE_by_idx(INOUT environment REFERENCE, IN idx INT, IN name CHAR, IN value CHAR) BEGIN		
+		IF name IS NOT NULL THEN
+			SET environment.GEH.UDE.NMPair[idx].Name = name;
+			SET environment.GEH.UDE.NMPair[idx].Value = value;
+		END IF;		
+END;
+
+--deprecated
+CREATE PROCEDURE set_userdata_trail(INOUT environment REFERENCE, IN usertrail CHAR) BEGIN		
+		SET environment.Variables.UserData.Trail=usertrail;
+End;
+
+CREATE FUNCTION get_geh_UDE(IN ref REFERENCE, IN name CHAR)  RETURNS CHAR
+BEGIN				
+	
+	DECLARE cnt INT CARDINALITY(ref.ErrorMessage.GEH.UDE.*[]);
+	DECLARE I INT 1;
+	DECLARE returnStr CHAR UNKNOWN_TYPE;
+	IF name is NOT NULL THEN
+		WHILE I <= cnt do		
+			IF ref.ErrorMessage.GEH.UDE.NMPair[cnt].Name = name THEN
+				SET returnStr=ref.ErrorMessage.GEH.UDE.NMPair[cnt].Value;
+			END IF;
+			SET I=I+1;		
+		END WHILE;
+	END IF;
+	return returnStr;
+END;
+
+--deprecated
+Create Function get_userdata_trail(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Variables.UserData.Trail;
+End;			
+
+--procedure for setting GEH error warning, and error code 
+
+CREATE PROCEDURE set_error_warning_flag(INOUT environment REFERENCE, IN warningFlag CHAR) BEGIN		
+		SET environment.Error.WarningFlag=warningFlag;
+End;
+
+CREATE PROCEDURE set_geh_error_flag(INOUT environment REFERENCE, IN gehFlag CHAR) BEGIN		
+		SET environment.Error.GEHErrorFlag=gehFlag;
+End;
+
+--deprecated
+CREATE PROCEDURE set_error_warning_code(INOUT environment REFERENCE, IN errorcode CHAR) BEGIN		
+		SET environment.Error.WarningErrorCode=errorcode;
+End;
+
+
+CREATE PROCEDURE set_geh_exception_code(INOUT environment REFERENCE, IN errorcode CHAR) BEGIN		
+		SET environment.Error.GEHErrorCode=errorcode;
+End;
+
+--used only with error_handler_generate_geh_exception_with_error_cd...
+CREATE PROCEDURE set_geh_child_exception_code(INOUT environment REFERENCE, IN errorcode CHAR) BEGIN		
+		--SET environment.Error.GEHChildErrorCode=errorcode;
+		CALL set_geh_UDE(environment, CHILD_TEXT, errorcode);
+End;
+
+--deprecated
+CREATE PROCEDURE set_error_warning(INOUT environment REFERENCE, IN warningtext CHAR) BEGIN		
+		SET environment.Error.Warning=warningtext;
+End;
+
+CREATE PROCEDURE set_error_text(INOUT environment REFERENCE, IN errtext CHAR) BEGIN		
+		SET environment.Error.Text=errtext;
+End;
+
+--deprecated
+Create Function get_error_warning_code(IN environment REFERENCE) RETURNS CHAR
+Begin	
+		return environment.Error.WarningErrorCode;
+End;			
+
+Create Function get_geh_exception_code(IN environment REFERENCE) RETURNS CHAR
+Begin	
+		return environment.Error.GEHErrorCode;
+End;			
+
+--used only with error_handler_generate_geh_exception_with_error_cd
+--Create Function get_geh_child_error(IN environment REFERENCE) RETURNS CHAR
+--Begin	
+--		return environment.Error.GEHChildErrorCode;
+--End;
+
+--deprecated
+Create Function get_error_warning(IN environment REFERENCE) RETURNS CHAR
+Begin	
+		return environment.Error.Warning;
+End;			
+
+Create Function get_error_text(IN environment REFERENCE) RETURNS CHAR
+Begin	
+		return environment.Error.Text;
+End;			
+
+--deprecated
+Create Function get_error_warning_flag(IN environment REFERENCE) RETURNS CHAR
+Begin	
+		return environment.Error.WarningFlag;
+End;			
+
+Create Function get_geh_error_flag(IN environment REFERENCE) RETURNS CHAR
+Begin	
+		IF NULLIF(environment.Error.GEHErrorFlag,'') IS NOT NULL THEN
+			return environment.Error.GEHErrorFlag;
+		ELSE --default
+			return 'Y';
+		END IF;
+	
+End;			
+
+Create Function trim_msgid(IN msgid CHAR) RETURNS CHAR
+Begin	
+	SET msgid = REPLACE(msgid, 'X', '');
+	SET msgid = REPLACE(msgid, '''', ''); 
+	return msgid;
+End;			
+		
+Create Function get_errmsg_msg_id(IN inref REFERENCE) RETURNS CHAR
+Begin	
+	    DECLARE msgid CHAR;
+		SET msgid = cast(inref.ErrorMessage.MessageId as char); 
+		return msgid;		
+		--return trim_msgid(msgid);		
+End;			
+
+Create Function get_errmsg_id_as_char(IN id CHAR) RETURNS CHAR
+Begin	
+	    DECLARE msgid CHAR;
+		SET msgid = cast(id as char); 
+		return msgid;	
+		--return trim_msgid(msgid);	
+End;			
+
+Create Function get_errmsg_correl_id(IN inref REFERENCE) RETURNS CHAR
+Begin	
+	    DECLARE msgid CHAR;
+		SET msgid = cast(inref.ErrorMessage.CorrelationId as char); 
+		return msgid;	
+		--return trim_msgid(msgid);	
+End;			
+

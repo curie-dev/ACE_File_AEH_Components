@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" 
+xmlns:xmi="http://www.omg.org/XMI" xmlns:ComIbmCompute.msgnode="ComIbmCompute.msgnode" xmlns:ComIbmMQOutput.msgnode="ComIbmMQOutput.msgnode" xmlns:ComIbmFlowOrder.msgnode="ComIbmFlowOrder.msgnode" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" 
+xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" nsURI="adesa/aeh/common/error/I0012_MF_AEH_GENERATE_GEH_ERROR.subflow" 
+nsPrefix="adesa_aeh_common_error_I0012_MF_AEH_GENERATE_GEH_ERROR.subflow">
+<eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1">
+<eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.queueName" name="queueName" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.GEH_GENERAL_EXCEPTION_CD" name="GEH_GENERAL_EXCEPTION_CD" lowerBound="1"  defaultValueLiteral="0.0.0.0">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.GEH_PARSER_EXCEPTION_CD" name="GEH_PARSER_EXCEPTION_CD" lowerBound="1"  defaultValueLiteral="0.0.0.0">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.GEH_DATABASE_EXCEPTION_CD" name="GEH_DATABASE_EXCEPTION_CD" lowerBound="1"  defaultValueLiteral="0.0.0.0">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<translation xmi:type="utility:TranslatableString" key="I0012_MF_AEH_GENERATE_GEH_ERROR" bundleName="adesa/aeh/common/error/I0012_MF_AEH_GENERATE_GEH_ERROR" pluginId="flowAPIgenerated"/>
+<colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/flowAPIgenerated/icons/full/obj16/I0012_MF_AEH_GENERATE_GEH_ERROR.gif"/>
+<colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/flowAPIgenerated/icons/full/obj30/I0012_MF_AEH_GENERATE_GEH_ERROR.gif"/>
+<shortDescription xmi:type="utility:ConstantString" string="used in a try catch captures broker error and converts to GEH error and sends it"/>
+<longDescription xmi:type="utility:ConstantString" string="used in a try catch captures broker error and converts to GEH error and sends it. Developer should provide all GEH error codes, the code depends on audit settings for correl, msgid, source,common system info..&#xD;&#xA;The developer is responsible for any roll back"/>
+<version xmi:type="utility:ConstantString" string="initial"/>
+<composition>
+<nodes xmi:type="eflow:FCMSource" xmi:id="InTerminal.Input" location="30,121">
+<translation xmi:type="utility:TranslatableString" key="InTerminal.Input" bundleName="adesa/aeh/common/error/I0012_MF_AEH_GENERATE_GEH_ERROR" pluginId="flowAPIgenerated"/>
+</nodes>
+<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="204,121" computeExpression="esql://routine/adesa.aeh.common.error#error_handler_subflow_compute.Main" computeMode="destinationAndMessage" parserXmlnscUseForXmlnsDomain="true">
+<translation xmi:type="utility:ConstantString" string="common Error"/>
+</nodes>
+<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="321,122" computeExpression="esql://routine/adesa.aeh.common.error#error_handler_transform_common_to_geh_exception.Main">
+<translation xmi:type="utility:ConstantString" string="common to GEH"/>
+</nodes>
+<nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_6" location="419,66" transactionMode="no" persistenceMode="yes">
+<translation xmi:type="utility:ConstantString" string="GEH Error queue"/>
+</nodes>
+<nodes xmi:type="ComIbmFlowOrder.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" location="99,121">
+<translation xmi:type="utility:ConstantString" string="FlowOrder"/>
+</nodes>
+<nodes xmi:type="eflow:FCMSink" xmi:id="OutTerminal.Output" location="206,206">
+<translation xmi:type="utility:TranslatableString" key="OutTerminal.Mainline" bundleName="adesa/aeh/common/error/I0012_MF_AEH_GENERATE_GEH_ERROR" pluginId="flowAPIgenerated"/>
+</nodes>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="FCMComposite_1_1" sourceNode="InTerminal.Input" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.first" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="OutTerminal.Output" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.second" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" targetNode="FCMComposite_1_6" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+</composition>
+<propertyOrganizer>
+<propertyDescriptor groupName="Group.Basic" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.mq.MQQueueNameEditor" configurable="true" describedAttribute="Property.queueName">
+<propertyName xmi:type="utility:TranslatableString" key="Property.queueName" bundleName="ComIbmMQOutput" pluginId="com.ibm.etools.mft.ibmnodes"/>
+<propertyDescriptor groupName="Group.GEH_ERROR_CD_CONFIG" configurable="true" userDefined="true" describedAttribute="Property.GEH_GENERAL_EXCEPTION_CD">
+<propertyName xmi:type="utility:TranslatableString" key="Property.GEH_GENERAL_EXCEPTION_CD" bundleName="adesa/aeh/common/error/I0012_MF_AEH_GENERATE_GEH_ERROR" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.GEH_ERROR_CD_CONFIG" configurable="true" userDefined="true" describedAttribute="Property.GEH_PARSER_EXCEPTION_CD">
+<propertyName xmi:type="utility:TranslatableString" key="Property.GEH_PARSER_EXCEPTION_CD" bundleName="adesa/aeh/common/error/I0012_MF_AEH_GENERATE_GEH_ERROR" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.GEH_ERROR_CD_CONFIG" configurable="true" userDefined="true" describedAttribute="Property.GEH_DATABASE_EXCEPTION_CD">
+<propertyName xmi:type="utility:TranslatableString" key="Property.GEH_DATABASE_EXCEPTION_CD" bundleName="adesa/aeh/common/error/I0012_MF_AEH_GENERATE_GEH_ERROR" pluginId="flowAPIgenerated"/>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyOrganizer>
+<attributeLinks promotedAttribute="Property.queueName" overriddenNodes="FCMComposite_1_6">
+<overriddenAttribute href="ComIbmMQOutput.msgnode#Property.queueName"/>
+</attributeLinks>
+<stickyBoard/>
+</eClassifiers>
+</ecore:EPackage>

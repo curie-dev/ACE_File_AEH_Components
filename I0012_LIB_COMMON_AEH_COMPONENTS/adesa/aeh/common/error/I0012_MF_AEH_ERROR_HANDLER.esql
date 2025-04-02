@@ -1,0 +1,36 @@
+BROKER SCHEMA adesa.aeh.common.error
+
+
+CREATE FILTER MODULE error_handler_subflow_mainline_filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		--ret true always?
+		IF FIELDNAME (Root.MQMD) ='MQMD' THEN
+		--IF Root.*[2] = 'MQMD' THEN
+			IF Root.MQMD.BackoutCount >= 0 THEN
+				RETURN TRUE;
+			ELSE 
+				RETURN FALSE;
+			END IF;
+		ELSE RETURN TRUE; -- default is to process
+		END IF;
+		
+	END;
+
+END MODULE;
+
+
+CREATE FILTER MODULE MF_AEH_ERROR_HANDLER_Error_to_GEH_
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		IF (FIELDNAME (Root.XMLNS.*[1]) = 'ErrorMessage') THEN
+			IF (ERROR_TO_GEH) THEN
+				RETURN TRUE;
+			ELSE
+				RETURN FALSE;
+			END IF;
+		END IF;
+		RETURN UNKNOWN;
+	END;
+
+END MODULE;
