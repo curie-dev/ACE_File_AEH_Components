@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:ComIbmCompute.msgnode="ComIbmCompute.msgnode" xmlns:ComIbmFileOutput.msgnode="ComIbmFileOutput.msgnode" xmlns:ComIbmLabel.msgnode="ComIbmLabel.msgnode" xmlns:ComIbmSOAPInput.msgnode="ComIbmSOAPInput.msgnode" xmlns:ComIbmSOAPReply.msgnode="ComIbmSOAPReply.msgnode" xmlns:adesa_aeh_common_audit_I0012_MF_AEH_AUDIT_SUBFLOW.subflow="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW.subflow" xmlns:adesa_aeh_common_error_I0012_MF_AEH_ERROR_HANDLER.subflow="adesa/aeh/common/error/I0012_MF_AEH_ERROR_HANDLER.subflow"
+    xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" nsURI="I1151_MF_TDD_OL_NOSALE.msgflow" nsPrefix="I1151_MF_TDD_OL_NOSALE.msgflow">
+  <eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1">
+    <eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.OL_FILE_NAME" name="OL_FILE_NAME" lowerBound="1" defaultValueLiteral="tdd_consignment_">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+    <eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.OL_FILE_EXT" name="OL_FILE_EXT" lowerBound="1" defaultValueLiteral=".xml">
+      <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+    </eStructuralFeatures>
+    <translation xmi:type="utility:TranslatableString" key="I1151_MF_TDD_OL_NOSALE" bundleName="I1151_MF_TDD_OL_NOSALE" pluginId="I1151_APP_EBIZ_TDD_OL_NOSALE"/>
+    <colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/I1151_APP_EBIZ_TDD_OL_NOSALE/icons/full/obj16/I1151_MF_TDD_OL_NOSALE.gif"/>
+    <colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/I1151_APP_EBIZ_TDD_OL_NOSALE/icons/full/obj30/I1151_MF_TDD_OL_NOSALE.gif"/>
+    <composition>
+      <nodes xmi:type="ComIbmSOAPInput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" location="12,110" wsdlFileName="MS_TDD_OL_NOSALE/com/adesa/tdd/nosale/TDD_OL_NOSALEService.wsdl" selectedPortType="TDD_OL_NOSALEPortType" selectedBinding="TDD_OL_NOSALESOAP_HTTP_Binding" selectedPort="TDD_OL_NOSALESOAP_HTTP_Port" targetNamespace="http://adesa.com/tdd/nosale" useHTTPTransport="true" urlSelector="/TDD_OL_NoSaleUpload/v1.0" allowQueryWSDL="true" setDestinationList="false" messageSetProperty="MS_TDD_OL_NOSALE"
+          parserXmlnscBuildTreeUsingXMLSchema="false" validateMaster="none">
+        <translation xmi:type="utility:ConstantString" string="SOAP Input"/>
+      </nodes>
+      <nodes xmi:type="adesa_aeh_common_audit_I0012_MF_AEH_AUDIT_SUBFLOW.subflow:FCMComposite_1" xmi:id="FCMComposite_1_5" location="97,235" INCL_PAYLOAD="true" AUDIT_SRC_SYSTEM="TDD" AUDIT_SRC_SYSTEM_VERSION="1" AUDIT_SRC_EP="TDD" AUDIT_TARGET_EP="OpenLane" AUDIT_SUBJECT="AUDIT.EBIZDAEMON.TDD.NOSALE" KEEP_CURR_SETTING="true" AUDIT_STATUS="No-Sale Upload Started">
+        <translation xmi:type="utility:ConstantString" string="GAL"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="78,163" computeExpression="esql://routine/#MF_TDD_OL_NOSALE_failure_response.Main" computeMode="exceptionAndMessage">
+        <translation xmi:type="utility:ConstantString" string="failure_response"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" location="267,106" computeExpression="esql://routine/#MF_TDD_OL_NOSALE_set_audit_and_filename.Main" computeMode="destinationAndMessage">
+        <translation xmi:type="utility:ConstantString" string="set_audit_and_filename"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_8" location="27,235" labelName="GAL">
+        <translation xmi:type="utility:ConstantString" string="GAL1"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_10" location="550,111" computeExpression="esql://routine/#MF_TDD_OL_NOSALE_success_response_and_audit.Main">
+        <translation xmi:type="utility:ConstantString" string="success_response_and_audit"/>
+      </nodes>
+      <nodes xmi:type="ComIbmSOAPReply.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" location="91,302" validateMaster="none">
+        <translation xmi:type="utility:ConstantString" string="SOAP Reply"/>
+      </nodes>
+      <nodes xmi:type="ComIbmLabel.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_12" location="23,302" labelName="REPLY">
+        <translation xmi:type="utility:ConstantString" string="REPLY"/>
+      </nodes>
+      <nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_13" location="580,47" computeExpression="esql://routine/#MF_TDD_OL_NOSALE_throw_exception.Main">
+        <translation xmi:type="utility:ConstantString" string="throw_exception"/>
+      </nodes>
+      <nodes xmi:type="adesa_aeh_common_error_I0012_MF_AEH_ERROR_HANDLER.subflow:FCMComposite_1" xmi:id="FCMComposite_1_2" location="188,106" GEH_GENERAL_EXCEPTION_CD="27.1139.1.1" GEH_PARSER_EXCEPTION_CD="27.1139.10.1">
+        <translation xmi:type="utility:ConstantString" string="GEH"/>
+      </nodes>
+      <nodes xmi:type="ComIbmFileOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" location="416,66">
+        <translation xmi:type="utility:ConstantString" string="File Output1"/>
+      </nodes>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_8" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Input"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_16" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.catch" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_12" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.Catch"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.MainlineIn"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_2" sourceNode="FCMComposite_1_1" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.Failure"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.MainlineOut" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_7" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.EOD" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" targetNode="FCMComposite_1_13" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+      <connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_11" targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+    </composition>
+    <propertyOrganizer>
+      <propertyDescriptor groupName="Group.Basic" configurable="true" userDefined="true" describedAttribute="Property.OL_FILE_NAME">
+        <propertyName xmi:type="utility:TranslatableString" key="Property.OL_FILE_NAME" bundleName="I1151_MF_TDD_OL_NOSALE" pluginId="I1151_APP_EBIZ_TDD_OL_NOSALE"/>
+        <propertyDescriptor groupName="Group.Basic" configurable="true" userDefined="true" describedAttribute="Property.OL_FILE_EXT">
+          <propertyName xmi:type="utility:TranslatableString" key="Property.OL_FILE_EXT" bundleName="I1151_MF_TDD_OL_NOSALE" pluginId="I1151_APP_EBIZ_TDD_OL_NOSALE"/>
+        </propertyDescriptor>
+      </propertyDescriptor>
+    </propertyOrganizer>
+    <stickyBoard/>
+  </eClassifiers>
+</ecore:EPackage>

@@ -1,0 +1,100 @@
+PATH adesa.aeh.common.audit, adesa.aeh.common.error;
+
+DECLARE OL_FILE_NAME EXTERNAL CHAR 'tdd_consignment_';
+DECLARE OL_FILE_EXT EXTERNAL CHAR '.xml'; 
+
+CREATE COMPUTE MODULE MF_TDD_OL_NOSALE_set_audit_and_filename
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		SET OutputRoot = InputRoot;		
+		DECLARE env REFERENCE TO Environment;			
+		
+		--set audit values
+		CALL set_audit_correl_id2(env,CAST(CURRENT_TIMESTAMP AS CHAR FORMAT 'yyyyMMddHHmmssSSS'));
+		CALL set_audit_subject(env,TDDOL_GAL_SUBJECT);
+		CALL set_audit_status(env, TDDOL_GAL_START_STATUS);		
+		PROPAGATE TO LABEL GAL_LABEL DELETE NONE;	
+		
+		--set filename and destination directory
+		CALL set_file_name(env, OL_FILE_NAME || 
+								get_audit_correl_id(env) || 
+								OL_FILE_EXT);		
+		SET OutputLocalEnvironment.Destination.File.Name = get_file_name(env);		
+		RETURN TRUE;
+	END;
+END MODULE;
+
+CREATE COMPUTE MODULE MF_TDD_OL_NOSALE_failure_response
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyMessageHeaders();		
+		DECLARE env REFERENCE TO Environment;	
+		DECLARE errMsg CHAR get_error_message(env,InputExceptionList.[1]);		
+		
+		--build soap fault
+		SET OutputRoot.SOAP.Body.soapNS:Fault.faultcode = DEFAULT_ERR_CODE;
+		SET OutputRoot.SOAP.Body.soapNS:Fault.faultstring = COALESCE(errMsg,DEFAULT_ERR_MSG);	
+		SET OutputExceptionList = InputExceptionList;	
+		PROPAGATE TO LABEL REPLY_LABEL DELETE NONE;
+
+		RETURN TRUE;
+	END;
+	
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;
+ 
+CREATE COMPUTE MODULE MF_TDD_OL_NOSALE_success_response_and_audit
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		CALL CopyMessageHeaders();
+		DECLARE env REFERENCE TO Environment;
+		
+		--build response
+		SET OutputRoot.XMLNSC.consignmentFileResponse.returnCode = 0;
+		SET OutputRoot.XMLNSC.consignmentFileResponse.returnMessage = SUCCESS_REPLY;
+		PROPAGATE TO LABEL REPLY_LABEL;		
+		
+		--set audit values
+		CALL set_audit_status(env,TDDOL_GAL_END_STATUS);
+		CALL set_audit_include_payload_flag(env,FALSE);
+		CALL set_audit_entry(env, TDDOL_GAL_AUDIT_ENTRY,get_file_name(env));		
+		PROPAGATE TO LABEL GAL_LABEL;
+		
+		RETURN FALSE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+END MODULE;
+
+CREATE COMPUTE MODULE MF_TDD_OL_NOSALE_throw_exception
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		DECLARE env REFERENCE TO Environment;
+		THROW USER EXCEPTION CATALOG 'BIPv610' MESSAGE 2949 VALUES ('GEH_ERROR_CODE='||TDDOL_GEH_FTP_ERR_CD
+					, 'EXCEPTION_TYPE='|| EXCEPTION_TYPE
+					, 'APP_SUBJECT_NAME='
+					, 'SERVICE_NAME=' || SQL.MessageFlowLabel
+					, 'NODE_NAME=' || SQL.NodeType
+					, 'MOD_NAME=' || SQL.NodeLabel
+					, 'EXCEPTION_DETAILS='|| 'Error occurred during file upload'
+					, 'CHILD_EXCEPTION_CD='
+					, 'USER_TRACE_1=' || get_error_message(env,InputExceptionList.[1])
+					, '');
+	END;
+END MODULE;
