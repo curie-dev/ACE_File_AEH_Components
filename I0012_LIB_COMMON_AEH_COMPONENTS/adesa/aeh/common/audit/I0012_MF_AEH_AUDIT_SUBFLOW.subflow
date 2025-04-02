@@ -1,1 +1,173 @@
-
+<?xml version="1.0" encoding="UTF-8"?>
+<ecore:EPackage xmi:version="2.0" 
+xmlns:xmi="http://www.omg.org/XMI" xmlns:ComIbmMQOutput.msgnode="ComIbmMQOutput.msgnode" xmlns:ComIbmFlowOrder.msgnode="ComIbmFlowOrder.msgnode" xmlns:ComIbmCompute.msgnode="ComIbmCompute.msgnode" xmlns:ComIbmFilter.msgnode="ComIbmFilter.msgnode" xmlns:ecore="http://www.eclipse.org/emf/2002/Ecore" xmlns:eflow="http://www.ibm.com/wbi/2005/eflow" 
+xmlns:utility="http://www.ibm.com/wbi/2005/eflow_utility" nsURI="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW.subflow" 
+nsPrefix="adesa_aeh_common_audit_I0012_MF_AEH_AUDIT_SUBFLOW.subflow">
+<eClassifiers xmi:type="eflow:FCMComposite" name="FCMComposite_1">
+<eSuperTypes href="http://www.ibm.com/wbi/2005/eflow#//FCMBlock"/>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_ON" name="AUDIT_ON" lowerBound="1"  defaultValueLiteral="true">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.INCL_PAYLOAD" name="INCL_PAYLOAD" lowerBound="1"  defaultValueLiteral="false">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_SRC_SYSTEM" name="AUDIT_SRC_SYSTEM" lowerBound="1"  defaultValueLiteral="IHUB">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_SRC_SYSTEM_VERSION" name="AUDIT_SRC_SYSTEM_VERSION" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_DEST_SYSTEM" name="AUDIT_DEST_SYSTEM" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_DEST_SYSTEM_VERSION" name="AUDIT_DEST_SYSTEM_VERSION" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_SRC_EVENT_NAME" name="AUDIT_SRC_EVENT_NAME" lowerBound="1"  defaultValueLiteral="Audit">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_SRC_EVENT_VERSION" name="AUDIT_SRC_EVENT_VERSION" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_SRC_EP" name="AUDIT_SRC_EP" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_TARGET_EP" name="AUDIT_TARGET_EP" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_REPROC_EP" name="AUDIT_REPROC_EP" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_SUBJECT" name="AUDIT_SUBJECT" lowerBound="1"  defaultValueLiteral="IHUB.COMMON.DEFAULT">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.COPY_CORREL_ID_TO_MSG_ID" name="COPY_CORREL_ID_TO_MSG_ID" lowerBound="1" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.KEEP_CURR_SETTING" name="KEEP_CURR_SETTING" lowerBound="1" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.AUDIT_STATUS" name="AUDIT_STATUS" lowerBound="1"  defaultValueLiteral="Received">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.COPY_MSG_ID_TO_CORREL_ID" name="COPY_MSG_ID_TO_CORREL_ID" lowerBound="1" >
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EBoolean"/>
+</eStructuralFeatures>
+<eStructuralFeatures xmi:type="ecore:EAttribute" xmi:id="Property.queueName" name="queueName"  defaultValueLiteral="IHUB.AUDIT.GAL.IN">
+  <eType xmi:type="ecore:EDataType" href="http://www.eclipse.org/emf/2002/Ecore#//EString"/>
+</eStructuralFeatures>
+<translation xmi:type="utility:TranslatableString" key="I0012_MF_AEH_AUDIT_SUBFLOW" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<colorGraphic16 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/flowAPIgenerated/icons/full/obj16/I0012_MF_AEH_AUDIT_SUBFLOW.gif"/>
+<colorGraphic32 xmi:type="utility:GIFFileGraphic" resourceName="platform:/plugin/flowAPIgenerated/icons/full/obj30/I0012_MF_AEH_AUDIT_SUBFLOW.gif"/>
+<composition>
+<nodes xmi:type="eflow:FCMSource" xmi:id="InTerminal.Input" location="9,184">
+<translation xmi:type="utility:TranslatableString" key="InTerminal.Input" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+</nodes>
+<nodes xmi:type="eflow:FCMSink" xmi:id="OutTerminal.mainline" location="184,261">
+<translation xmi:type="utility:TranslatableString" key="OutTerminal.mainline" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+</nodes>
+<nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_1" location="545,142" queueName="IHUB.AUDIT.GAL.IN" transactionMode="no" persistenceMode="yes">
+<translation xmi:type="utility:ConstantString" string="GAL audit.OUT"/>
+<shortDescription xmi:type="utility:ConstantString" string="Put original reply-to details to store"/>
+<longDescription xmi:type="utility:ConstantString" string="This output node stores the extracted Reply-to queue details  in the message to temporary queue store. The message is writen using the original message ID in the Correl ID field so that it can be retrevived my the MQ Get node in the rely flow."/>
+</nodes>
+<nodes xmi:type="ComIbmFlowOrder.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_2" location="69,184">
+<translation xmi:type="utility:ConstantString" string="audit flow order"/>
+<shortDescription xmi:type="utility:ConstantString" string="Audit Flow Order"/>
+<longDescription xmi:type="utility:ConstantString" string="The original input message is propagated to the two outputs of the audit flow order node.&#xD;&#xA;The First branch uses the message headers to extract and create the audit message.&#xD;&#xA;The Second branch passes the whole message tree to drive the backend application request."/>
+</nodes>
+<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_3" location="276,135" computeExpression="esql://routine/adesa.aeh.common.audit#common_audit_subflow.Main" validateMaster="inherit">
+<translation xmi:type="utility:ConstantString" string="build audit message"/>
+<shortDescription xmi:type="utility:ConstantString" string="Save original reply-to queue"/>
+<longDescription xmi:type="utility:ConstantString" string="This compute node simply extracts the Reply-to queue details and places them in the message to be stored in the temporary store.&#xD;&#xA;Additionally it copies the MsgID to the CorrelID in the MQMD to enable the reply flow MQGet node to retreive the corresponding stored message."/>
+</nodes>
+<nodes xmi:type="ComIbmFilter.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_4" location="421,137" filterExpression="esql://routine/adesa.aeh.common.audit#com_audit_subflow_Filter.Main">
+<translation xmi:type="utility:ConstantString" string="Filter"/>
+</nodes>
+<nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_5" location="524,247" queueName="IHUB.AUDIT.GAL.IN" transactionMode="no" persistenceMode="yes" newMsgId="true" newCorrelId="true" messageContext="default">
+<translation xmi:type="utility:ConstantString" string="GAL newIdaudit.OUT"/>
+<shortDescription xmi:type="utility:ConstantString" string="not used currently"/>
+</nodes>
+<nodes xmi:type="ComIbmFilter.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_7" location="177,133" filterExpression="esql://routine/adesa.aeh.common.audit#common_audit_subflow_check_audit_Filter.Main">
+<translation xmi:type="utility:ConstantString" string="audit check"/>
+</nodes>
+<nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_9" location="657,35" queueName="IHUB.AUDIT.GAL.IN" transactionMode="no" persistenceMode="yes" newMsgId="true" newCorrelId="true">
+<translation xmi:type="utility:ConstantString" string="GAL noCorrelIdaudit.Out"/>
+</nodes>
+<nodes xmi:type="ComIbmCompute.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_10" location="561,34" computeExpression="esql://routine/adesa.aeh.common.audit#audit_subflow_newMQMD_Compute.Main">
+<translation xmi:type="utility:ConstantString" string="newMQMD"/>
+</nodes>
+<nodes xmi:type="ComIbmMQOutput.msgnode:FCMComposite_1" xmi:id="FCMComposite_1_11" location="170,30" transactionMode="no" persistenceMode="yes">
+<translation xmi:type="utility:ConstantString" string="GAL Audit queue"/>
+</nodes>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_1" targetNode="FCMComposite_1_2" sourceNode="InTerminal.Input" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_2" targetNode="OutTerminal.mainline" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.second" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_3" targetNode="FCMComposite_1_4" sourceNode="FCMComposite_1_3" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_4" targetNode="FCMComposite_1_1" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.false" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_5" targetNode="FCMComposite_1_5" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.true" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_6" targetNode="FCMComposite_1_7" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.first" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_7" targetNode="FCMComposite_1_10" sourceNode="FCMComposite_1_4" sourceTerminalName="OutTerminal.unknown" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_8" targetNode="FCMComposite_1_9" sourceNode="FCMComposite_1_10" sourceTerminalName="OutTerminal.out" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_9" targetNode="FCMComposite_1_11" sourceNode="FCMComposite_1_2" sourceTerminalName="OutTerminal.failure" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_10" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_7" sourceTerminalName="OutTerminal.true" targetTerminalName="InTerminal.in"/>
+<connections xmi:type="eflow:FCMConnection" xmi:id="FCMConnection_11" targetNode="FCMComposite_1_3" sourceNode="FCMComposite_1_7" sourceTerminalName="OutTerminal.unknown" targetTerminalName="InTerminal.in"/>
+</composition>
+<propertyOrganizer>
+<propertyDescriptor groupName="Group.Basic" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_ON">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_ON" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.Basic" configurable="true" userDefined="true" describedAttribute="Property.INCL_PAYLOAD">
+<propertyName xmi:type="utility:TranslatableString" key="Property.INCL_PAYLOAD" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_SRC_SYSTEM">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_SRC_SYSTEM" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_SRC_SYSTEM_VERSION">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_SRC_SYSTEM_VERSION" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_DEST_SYSTEM">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_DEST_SYSTEM" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_DEST_SYSTEM_VERSION">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_DEST_SYSTEM_VERSION" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_SRC_EVENT_NAME">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_SRC_EVENT_NAME" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_SRC_EVENT_VERSION">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_SRC_EVENT_VERSION" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_SRC_EP">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_SRC_EP" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_TARGET_EP">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_TARGET_EP" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_REPROC_EP">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_REPROC_EP" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_SUBJECT">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_SUBJECT" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.COPY_CORREL_ID_TO_MSG_ID">
+<propertyName xmi:type="utility:TranslatableString" key="Property.COPY_CORREL_ID_TO_MSG_ID" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.KEEP_CURR_SETTING">
+<propertyName xmi:type="utility:TranslatableString" key="Property.KEEP_CURR_SETTING" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.AUDIT_STATUS">
+<propertyName xmi:type="utility:TranslatableString" key="Property.AUDIT_STATUS" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.AUDIT_SETTING" configurable="true" userDefined="true" describedAttribute="Property.COPY_MSG_ID_TO_CORREL_ID">
+<propertyName xmi:type="utility:TranslatableString" key="Property.COPY_MSG_ID_TO_CORREL_ID" bundleName="adesa/aeh/common/audit/I0012_MF_AEH_AUDIT_SUBFLOW" pluginId="flowAPIgenerated"/>
+<propertyDescriptor groupName="Group.Basic" propertyEditor="com.ibm.etools.mft.ibmnodes.editors.mq.MQQueueNameEditor" configurable="true" describedAttribute="Property.queueName">
+<propertyName xmi:type="utility:TranslatableString" key="Property.queueName" bundleName="ComIbmMQOutput" pluginId="com.ibm.etools.mft.ibmnodes"/>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyDescriptor>
+</propertyOrganizer>
+<attributeLinks promotedAttribute="Property.queueName" overriddenNodes="FCMComposite_1_1 FCMComposite_1_9 FCMComposite_1_5 FCMComposite_1_11">
+<overriddenAttribute href="ComIbmMQOutput.msgnode#Property.queueName"/>
+</attributeLinks>
+<stickyBoard/>
+</eClassifiers>
+</ecore:EPackage>

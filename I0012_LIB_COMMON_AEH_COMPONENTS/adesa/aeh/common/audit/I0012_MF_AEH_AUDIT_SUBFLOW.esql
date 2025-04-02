@@ -1,0 +1,901 @@
+BROKER SCHEMA adesa.aeh.common.audit
+PATH adesa.aeh.common.audit;
+--author: Ravi Kiran Josyula
+/*Adesa pilot phase Implementation
+Some Common Procedures for reuse for audit setting in a common way
+set_audit_source_system
+set_audit_source_system_version
+set_audit_event_name
+set_audit_event_version
+set_audit_message_type
+set_audit_correl_id
+set_audit_subject
+set_audit_destination_system
+set_audit_destination_system_version
+set_audit_source_end_point
+set_audit_target_end_point
+set_audit_reprocess_end_point
+set_audit_message_destination
+set_audit_created_by
+set_audit_service
+set_audit_entry
+set_audit_create_timestamp
+set_audit_message_source
+set_audit_flag
+set_audit_status
+
+*/
+---some are for future use..
+DECLARE RECIEVED_STATUS CONSTANT CHAR 'Received';
+DECLARE PROCESSED_STATUS CONSTANT CHAR 'Processed';
+DECLARE ERROR_STATUS CONSTANT CHAR 'Errored';
+DECLARE WARNING_STATUS CONSTANT CHAR 'Warning'; --Warning
+DECLARE REPROCESSED_STATUS CONSTANT CHAR 'Reprocessed'; --future RJ
+DECLARE REJECTED_STATUS CONSTANT CHAR 'Rejected';--future
+DECLARE AUDIT_ON EXTERNAL CONSTANT boolean true;
+DECLARE INCL_PAYLOAD EXTERNAL CONSTANT boolean true;
+
+DECLARE KEEP_CURR_SETTING EXTERNAL CONSTANT boolean false;
+DECLARE COPY_CORREL_ID_TO_MSG_ID EXTERNAL CONSTANT boolean false;
+DECLARE COPY_MSG_ID_TO_CORREL_ID EXTERNAL CONSTANT boolean false;
+DECLARE AUDIT_SUBJECT_DEFAULT CONSTANT CHAR 'IHUB.COMMON.DEFAULT'; --ZW.GAL.MAIN
+DECLARE AUDIT_SUBJECT EXTERNAL CONSTANT CHAR 'IHUB.COMMON.DEFAULT'; --ZW.GAL.MAIN
+DECLARE AUDIT_SRC_SYSTEM EXTERNAL CONSTANT CHAR 'UnKnown';
+DECLARE AUDIT_SRC_SYSTEM_VERSION EXTERNAL CONSTANT CHAR '';
+DECLARE AUDIT_DEST_SYSTEM EXTERNAL CONSTANT CHAR 'UnKnown';
+DECLARE AUDIT_DEST_SYSTEM_VERSION EXTERNAL CONSTANT CHAR '';
+DECLARE AUDIT_SRC_EVENT_NAME EXTERNAL CONSTANT CHAR '';
+DECLARE AUDIT_SRC_EVENT_VERSION EXTERNAL CONSTANT CHAR '';
+DECLARE AUDIT_SRC_EP EXTERNAL CONSTANT CHAR '';
+DECLARE AUDIT_TARGET_EP EXTERNAL CONSTANT CHAR '';
+DECLARE AUDIT_REPROC_EP EXTERNAL CONSTANT CHAR '';
+DECLARE AUDIT_STATUS EXTERNAL CONSTANT CHAR 'Received';
+DECLARE UNKNOWN_TYPE CONSTANT CHAR 'UnKnown' ;
+DECLARE ON CONSTANT CHAR 'ON' ;
+DECLARE OFF CONSTANT CHAR 'OFF' ;
+DECLARE DEF_EVENT_VERSION CONSTANT CHAR '1.0';
+
+/* Audit Settings
+		    a) SourceEndPoint		-- defaults to source queue
+			b) TargetEndPoint 			
+            c) SourceSystem		(required)
+            d) DestinationSystem (required)		
+			e) MessageType		(required)          			
+			f) CreateTimestamp		--defaults to current time stamp
+			g) CreatedBy			--defaults to message flow name
+			h) Service
+			i) ServiceStatus	(optional)
+			j) AuditEntryList (optional) 1 or more AuditEntry with Name Value pairs
+*/				
+	
+
+CREATE COMPUTE MODULE common_audit_subflow
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		DECLARE env REFERENCE TO Environment;		
+		CALL InitDefaults(env);
+		IF NULLIF(InputRoot.MQMD.CorrelId,'') IS NULL THEN		
+			CALL CreateMQMDHeader(env);						
+		ELSE
+		CALL CopyMessageHeaders();
+		END IF;
+		-- CALL CopyEntireMessage();		
+		DECLARE Error INTEGER;  /* Error number extracted from exception list */
+		SET Error = 0;
+		DECLARE Path CHARACTER;  /* Current path within the exception list */
+
+		-- Check if msg has a body
+		DECLARE msgbody BLOB;
+		DECLARE textmsgbody CHARACTER;
+		DECLARE noBody BOOLEAN;		
+		DECLARE inRoot REFERENCE TO InputRoot;
+		DECLARE J INTEGER CARDINALITY(InputRoot.*[]); 
+ 		SET noBody = FALSE;
+		
+		IF FIELDNAME (InputRoot.*[<]) = 'MQMD' OR FIELDNAME (InputRoot.*[<]) = 'MQRFH2' THEN
+			SET OutputRoot.*[J] = InputRoot.*[J]; /* copy last child since CopyMessageHeaders did not */
+			SET noBody = TRUE;						
+		END IF;
+		
+		DECLARE ns1 NAMESPACE 'http://www.adesa.com/ihub/common/IHubAuditMsg.xsd';
+		SET OutputRoot.XMLNS.ns1:AuditMessage.(XML.NamespaceDecl)xmlns = 'http://www.adesa.com/ihub/common/IHubAuditMsg.xsd';
+		IF	(COPY_CORREL_ID_TO_MSG_ID is true)  THEN
+			IF NULLIF(get_audit_correl_id(env),'') IS NOT NULL THEN
+				CALL set_audit_msg_id(env, get_audit_correl_id(env));
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:MessageId = get_audit_correl_id(env);
+			ELSE
+				IF NULLIF(InputRoot.MQMD.CorrelId,'') IS NOT NULL THEN
+					SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:MessageId = InputRoot.MQMD.CorrelId;
+					CALL set_audit_msg_id(env, InputRoot.MQMD.CorrelId);
+				END IF;
+			END IF;	
+		ELSE
+			IF NULLIF(get_audit_msg_id(env),'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:MessageId = get_audit_msg_id(env);
+			ELSE
+				IF NULLIF(InputRoot.MQMD.MsgId,'') IS NOT NULL THEN
+					CALL set_audit_msg_id(env, InputRoot.MQMD.MsgId);
+					SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:MessageId = InputRoot.MQMD.MsgId;
+				ELSE
+					SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:MessageId = '';		
+				END IF;		
+
+			END IF;		
+		 END IF;
+		
+		IF	(COPY_MSG_ID_TO_CORREL_ID is true)  THEN
+				IF NULLIF(get_audit_msg_id(env),'') IS NOT NULL THEN
+					CALL set_audit_correl_id2(env, get_audit_msg_id(env));
+				ELSE 
+					CALL set_audit_correl_id2(env,InputRoot.MQMD.MsgId);
+				END IF;
+		END IF;		 		
+		IF NULLIF(get_audit_correl_id(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CorrelationId = get_audit_correl_id(env);
+		ELSE
+			IF NULLIF(InputRoot.MQMD.CorrelId,'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CorrelationId = InputRoot.MQMD.CorrelId;
+			ELSE
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CorrelationId = '';		
+			END IF;		
+		END IF;		
+
+		 IF NULLIF(adesa.aeh.common.audit.get_audit_source_event_name(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceEvent.(XML.Attribute)Name = get_audit_source_event_name(env);
+		ELSE
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceEvent.(XML.Attribute)Name = UNKNOWN_TYPE;				
+		END IF;	
+		
+		IF NULLIF(adesa.aeh.common.audit.get_audit_source_event_version(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceEvent.(XML.Attribute)Version = get_audit_source_event_version(env);
+		ELSE
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceEvent.(XML.Attribute)Version = UNKNOWN_TYPE;				
+		END IF;							
+		
+		
+		IF NULLIF(get_audit_source_end_point(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceEndPoint = get_audit_source_end_point(env);
+		ELSE
+			IF NULLIF(InputRoot.MQMD.SourceQueue,'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceEndPoint = InputRoot.MQMD.SourceQueue;
+			ELSE
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceEndPoint = UNKNOWN_TYPE;		
+			END IF;		
+						
+		END IF;	
+		
+		
+		IF NULLIF(get_audit_target_end_point(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:TargetEndPoint = get_audit_target_end_point(env);
+		ELSE
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:TargetEndPoint = UNKNOWN_TYPE;	
+		END IF;	
+		
+		IF NULLIF(get_audit_reprocess_end_point(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:ReprocessEndPoint = get_audit_reprocess_end_point(env);
+		ELSE
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:ReprocessEndPoint = UNKNOWN_TYPE;	
+		END IF;	
+		
+		IF NULLIF(get_audit_source_system(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceSystem.(XML.Attribute)Name = get_audit_source_system(env);
+		ELSE
+			IF NULLIF(InputRoot.MQMD.ApplOriginData,'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceSystem.(XML.Attribute)Name = InputRoot.MQMD.ApplOriginData;
+			ELSE
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceSystem.(XML.Attribute)Name = UNKNOWN_TYPE;		
+			END IF;	
+		END IF;	
+		--TODO Source System version -done
+		IF NULLIF(get_audit_source_system_version(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:SourceSystem.(XML.Attribute)Version = get_audit_source_system_version(env);
+		END IF;
+
+		IF NULLIF(get_audit_destination_system(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:DestinationSystem.(XML.Attribute)Name = get_audit_destination_system(env);
+			IF NULLIF(get_audit_destination_system_version(env),'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:DestinationSystem.(XML.Attribute)Version = get_audit_destination_system_version(env);
+			END IF;	
+
+		END IF;	
+		
+								
+		IF NULLIF(get_audit_create_timestamp(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CreateTimestamp = get_audit_create_timestamp(env);
+		ELSE
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CreateTimestamp =  CURRENT_TIMESTAMP;
+		END IF;	
+		
+		IF NULLIF(get_audit_created_by(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CreatedBy = get_audit_created_by(env);
+		ELSE
+			IF NULLIF(InputRoot.MQMD.UserIdentifier,'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CreatedBy = InputRoot.MQMD.UserIdentifier;
+			--ELSE
+			--SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Header.ns1:CreatedBy  = '';		
+			END IF;	
+			
+		END IF;	
+		
+		IF NULLIF(adesa.aeh.common.audit.get_audit_subject(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Subject =  get_audit_subject(env);			
+		ELSE
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Subject = AUDIT_SUBJECT_DEFAULT;				
+		END IF;	
+		
+		IF NULLIF(get_audit_service(env),'') IS NOT NULL THEN
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Service = get_audit_service(env);
+		ELSE
+			SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:Service = SQL.MessageFlowLabel;	
+		END IF;	
+		
+		/* Insert original message using XML.CDataSection.. in case special characters are present. */
+		IF INCL_PAYLOAD IS FALSE THEN
+			IF get_audit_include_payload_flag(env) IS FALSE THEN
+				SET noBody=true;
+			END IF;
+		END IF;
+			
+		DECLARE xml CHARACTER;
+		--DECLARE payload BLOB;
+		--2008
+		DECLARE exceptionType CHAR;
+		DECLARE exceptionPath CHAR;
+		--DECLARE isUE boolean false;
+		DECLARE errorType INTEGER 0;
+		DECLARE isBlob boolean false;
+		DECLARE tmperr CHAR;
+			
+		IF noBody THEN
+			IF NULLIF(InputRoot.XML.ErrorMessage.ExceptionNumber,'') IS NOT NULL THEN
+			    CALL adesa.aeh.common.error.get_exception_type_path(InputRoot.XML, errorType, exceptionPath);
+			    SET tmperr = adesa.aeh.common.error.get_geh_error_string(InputRoot.XML, errorType, exceptionPath);			    
+			    CALL set_audit_status (env, ERROR_STATUS);
+			    SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceStatus = ERROR_STATUS;	
+			    CALL set_audit_entry(env, 'OriginalErrorCd', InputRoot.XML.ErrorMessage.ExceptionNumber);
+			    CALL set_audit_entry(env, 'OriginalErrorStr', tmperr);
+			    IF INCL_PAYLOAD IS TRUE OR get_audit_include_payload_flag(env) IS TRUE  THEN
+			    		SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.Attribute)isCompressed=get_audit_message_data_compression_flag(env);
+					  	SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.CDataSection)=InputRoot.XML.ErrorMessage.OriginalMessage.(XML.CDataSection);			
+			    ELSE SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData = 'No message body';
+			    END IF;
+			ELSE			
+				IF NULLIF(Environment.Audit.ServiceStatus,'') IS NOT NULL THEN
+					SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceStatus = adesa.aeh.common.audit.get_audit_status(env);
+				ELSE
+					SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceStatus = RECIEVED_STATUS;
+				END IF;				
+			END IF;
+		ELSE	--msg body is to be set	
+			SET msgbody = X'';
+			
+			IF FIELDNAME(InputRoot.*[<]) = 'BLOB' THEN
+				SET isBlob= true;
+				SET msgbody = InputRoot."BLOB"."BLOB";
+			ELSE			
+				SET msgbody = ASBITSTREAM(InputBody ENCODING 546 CCSID 1208);	
+			END IF;
+
+			IF NOT isBlob THEN
+					SET textmsgbody =  CAST(msgbody AS CHAR CCSID 1208);
+					--on jeff's request (its upto msgflows that reprocess)
+					SET textmsgbody =  REPLACE (textmsgbody,']]>','] ]>');					
+			END IF;
+		--END IF; --msgbset nobody							
+			
+		IF NULLIF(InputRoot.XML.ErrorMessage.ExceptionNumber,'') IS NOT NULL THEN
+		    SET OutputRoot.XMLNS.AuditMessage.ns1:ServiceStatus = ERROR_STATUS;			
+		    
+		    CALL adesa.aeh.common.error.get_exception_type_path(InputRoot.XML, errorType, exceptionPath);
+		    SET tmperr = adesa.aeh.common.error.get_geh_error_string(InputRoot.XML, errorType, exceptionPath);			    
+			    
+		    /*add entries to the AE */
+			  CALL set_audit_entry(env, 'OriginalErrorCd', InputRoot.XML.ErrorMessage.ExceptionNumber);
+			  CALL set_audit_entry(env, 'OriginalErrorStr', tmperr);			    
+   			  SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.Attribute)isCompressed=get_audit_message_data_compression_flag(env);
+			  SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.CDataSection)=InputRoot.XML.ErrorMessage.OriginalMessage.(XML.CDataSection);			
+		ELSE --normal
+			IF NULLIF(Environment.Audit.ServiceStatus,'') IS NOT NULL THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceStatus = adesa.aeh.common.audit.get_audit_status(env);--Environment.Audit.ServiceStatus;				
+			ELSE
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceStatus = RECIEVED_STATUS;
+			END IF;
+				
+			IF NULLIF (get_audit_message_data_compression_flag(env),'') IS NOT NULL THEN					
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.Attribute)isCompressed=get_audit_message_data_compression_flag(env);
+			ELSE						
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.Attribute)isCompressed='N';
+			END IF;
+										
+			IF isBlob THEN
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.CDataSection) = msgbody;
+			ELSE 
+				SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:ServiceData.(XML.CDataSection) = textmsgbody;
+			END IF;
+		END IF; --end normal
+	END IF; --msgbset nobody									
+	--Set Audit Entries
+	SET OutputRoot.XMLNS.ns1:AuditMessage.ns1:AuditEntry[] = SELECT I.Name AS (XML.Attribute)Name,
+         I.Value AS (XML.Attribute) Value
+         from  env.Audit.AE.NMPair[] as I;         					
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER;
+		DECLARE J INTEGER;
+		SET I = 1;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+	
+	CREATE PROCEDURE InitDefaults(INOUT env REFERENCE) BEGIN
+	
+ 		IF KEEP_CURR_SETTING is false THEN
+			CALL set_audit_source_system(env, AUDIT_SRC_SYSTEM);
+			CALL set_audit_source_system_version(env, AUDIT_SRC_SYSTEM_VERSION);
+			CALL set_audit_destination_system(env, AUDIT_DEST_SYSTEM);
+			CALL set_audit_destination_system_version(env, AUDIT_DEST_SYSTEM_VERSION);
+			CALL set_audit_subject(env, AUDIT_SUBJECT);
+			CALL set_audit_source_event(env, AUDIT_SRC_EVENT_NAME, AUDIT_SRC_EVENT_VERSION);
+			CALL set_audit_source_end_point(env, AUDIT_SRC_EP);
+			CALL set_audit_target_end_point(env, AUDIT_TARGET_EP); 
+			CALL set_audit_reprocess_end_point(env, AUDIT_REPROC_EP);
+			CALL set_audit_status(env,AUDIT_STATUS);
+ 		END IF;
+	
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+	
+	
+		CREATE PROCEDURE CreateMQMDHeader(INOUT env REFERENCE) BEGIN
+			SET OutputRoot.Properties.MessageDomain = 'XMLNS';
+			SET OutputRoot.Properties.MessageFormat='XML1'; 
+				 	 		
+			SET OutputRoot.MQMD.StrucId = MQMD_STRUC_ID;
+			SET OutputRoot.MQMD.Version = MQMD_CURRENT_VERSION;
+			SET OutputRoot.MQMD.CodedCharSetId = 1208; 
+			SET OutputRoot.MQMD.Encoding = 546; 
+			SET OutputRoot.MQMD.Format='XML'; 
+			SET	OutputRoot.MQMD.Expiry = -1;
+			SET	OutputRoot.MQMD.Persistence = MQPER_PERSISTENT; --should be default on the queue DEFPSIST
+			DECLARE tmpcorrelId CHAR;
+			IF FIELDNAME (InputRoot.*[2]) = 'HTTPInputHeader' THEN
+		 	 	SET OutputRoot.MQMD.MsgId=InputLocalEnvironment.Destination.HTTP.RequestIdentifier;
+		 	    SET OutputRoot.MQMD.CorrelId=InputLocalEnvironment.Destination.HTTP.RequestIdentifier;	
+		 	 	--add a check to see if correlId is already set
+		 	 	IF NULLIF(adesa.aeh.common.audit.get_audit_correl_id(env),'') IS NULL THEN			 	 		
+		 	 		SET tmpcorrelId = cast(InputLocalEnvironment.Destination.HTTP.RequestIdentifier as char);			
+					SET env.Audit.Header.CorrelationId=trim_msgid(tmpcorrelId);		 	 				 	 			 	 		
+		 	 	END IF;
+		 	 	IF NULLIF(adesa.aeh.common.audit.get_audit_msg_id(env),'') IS NULL THEN			 	 			 	 		
+		 	 		SET env.Audit.Header.MessageId=env.Audit.Header.CorrelationId;		 	 	
+		 	 	END IF;
+		 	 	/*Note: For JMSInput Developers should transform to JMS to MQ before using audit subflow*/					
+			ELSE
+			 	 	SET env.TEMP.CorrelId=MQCI_NEW_SESSION;
+		 	 		SET OutputRoot.MQMD.CorrelId=Environment.TEMP.CorrelId;
+		 	 		SET OutputRoot.MQMD.MsgId=Environment.TEMP.CorrelId;
+		 	 	IF NULLIF(adesa.aeh.common.audit.get_audit_correl_id(env),'') IS NULL THEN			 	 	
+		 	 		SET tmpcorrelId = cast(Environment.TEMP.CorrelId as char);
+		 	 		SET env.Audit.Header.CorrelationId=trim_msgid(tmpcorrelId);
+		 	 	END IF;
+		 	 	IF NULLIF(adesa.aeh.common.audit.get_audit_msg_id(env),'') IS NULL THEN			 	 			 	 		
+		 	 		SET tmpcorrelId = cast(Environment.TEMP.CorrelId as char);
+					SET env.Audit.Header.MessageId=trim_msgid(tmpcorrelId);
+		 	 	END IF;
+		    
+		    END IF;
+
+	END;		
+
+	
+END MODULE;
+
+
+CREATE FILTER MODULE com_audit_subflow_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		IF NULLIF(Root.MQMD.MsgId,'') IS NULL THEN		
+			RETURN UNKNOWN;
+		END IF;
+		
+		IF NULLIF(Root.MQMD.CorrelId,'') IS NULL THEN		
+			RETURN UNKNOWN;
+		END IF;
+		
+		return FALSE;
+	END;
+
+END MODULE;
+
+
+CREATE FILTER MODULE common_audit_subflow_check_audit_Filter
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN		
+		DECLARE env REFERENCE TO Environment;
+		IF NULLIF(get_audit_flag(env),'') IS NULL THEN
+			CALL set_audit_flag(env,ON); 
+		END IF;
+		
+		IF (get_audit_flag(env) = ON AND AUDIT_ON is true) THEN
+			return true;
+		END IF;
+ 
+		IF (AUDIT_ON is false AND get_audit_flag(env) = ON) THEN
+			RETURN FALSE;			
+		END IF;
+		
+		IF (AUDIT_ON is true AND get_audit_flag(env) = OFF) THEN
+			RETURN FALSE;			
+		END IF;
+			
+		IF (AUDIT_ON is false AND get_audit_flag(env) = OFF) THEN
+			RETURN FALSE;
+					ELSE RETURN UNKNOWN;
+			END IF;
+		
+	END;
+				
+END MODULE;
+	
+
+Create Function get_audit_recieved_status() RETURNS 
+CHAR
+Begin
+	return RECIEVED_STATUS;
+End;
+	
+
+Create Function get_audit_processed_status() RETURNS 
+CHAR
+Begin
+	return PROCESSED_STATUS;
+End;
+
+Create Function get_audit_warning_status() RETURNS 
+CHAR
+Begin
+	return WARNING_STATUS;
+End;
+	
+	
+Create Function get_audit_errored_status() RETURNS 
+CHAR
+Begin
+	return ERROR_STATUS;
+End;
+
+
+Create Function get_audit_reprocessed_status() RETURNS 
+CHAR
+Begin
+	return REPROCESSED_STATUS;
+End;		
+
+CREATE PROCEDURE set_audit_status(INOUT environment REFERENCE, IN status CHAR) BEGIN		
+		SET environment.Audit.ServiceStatus=status;
+End;
+
+CREATE PROCEDURE set_audit_source_system(INOUT environment REFERENCE, IN sourceSystem CHAR) BEGIN		
+		SET environment.Audit.Header.SourceSystem=sourceSystem;
+End;
+
+CREATE PROCEDURE set_audit_source_system_version(INOUT environment REFERENCE, IN sourceSystemVer CHAR) BEGIN		
+		SET environment.Audit.Header.SourceSystemVersion=sourceSystemVer;
+End;
+	
+	--not used
+CREATE PROCEDURE set_audit_source_system_id(INOUT environment REFERENCE, IN sourceSystemid CHAR) BEGIN		
+		SET environment.Audit.Header.SourceSystemId=sourceSystemid;
+End;
+		--use instead set_audit_message_type??
+CREATE PROCEDURE set_audit_source_event(INOUT environment REFERENCE, IN eventName CHAR,  IN eventVer CHAR) BEGIN		
+		SET environment.Audit.Header.EventName=eventName;
+				SET environment.Audit.Header.EventVersion=eventVer;
+End;
+
+CREATE PROCEDURE set_audit_source_event_name(INOUT environment REFERENCE, IN eventName CHAR) BEGIN		
+		SET environment.Audit.Header.EventName=eventName;
+End;
+
+CREATE PROCEDURE set_audit_source_event_version(INOUT environment REFERENCE, IN eventVersion CHAR) BEGIN		
+		SET environment.Audit.Header.EventVersion=eventVersion;
+End;
+
+--use source event
+CREATE PROCEDURE set_audit_message_type(INOUT environment REFERENCE, IN messageType CHAR) BEGIN		
+		CALL set_audit_source_event_name(environment,messageType);	
+End;
+
+CREATE PROCEDURE set_audit_message_version(INOUT environment REFERENCE, IN messageVer CHAR) BEGIN		
+		CALL set_audit_source_event_version(environment,messageVer);	
+End;
+
+--depcreacated
+CREATE PROCEDURE set_audit_msg_src_end_point(INOUT environment REFERENCE, IN msgsource CHAR) BEGIN		
+		SET environment.Audit.Header.MessageSourceEP=msgsource;
+End;	
+
+CREATE PROCEDURE set_audit_correl_id(INOUT environment REFERENCE, IN correlationId BLOB) BEGIN	
+	    DECLARE correlId CHAR;
+	    SET correlId = cast(correlationId as char);
+		SET environment.Audit.Header.CorrelationId=trim_msgid(correlId);
+End;
+
+
+CREATE PROCEDURE set_audit_msg_id(INOUT environment REFERENCE, IN msgId BLOB) BEGIN		
+	    DECLARE mesgId CHAR;
+	    SET mesgId = cast(msgId as char);
+		SET environment.Audit.Header.MessageId=trim_msgid(mesgId);
+End;
+
+--
+CREATE PROCEDURE set_audit_correl_id2(INOUT environment REFERENCE, IN correlationId CHAR) BEGIN		
+		SET environment.Audit.Header.CorrelationId=correlationId;
+End;
+
+
+CREATE PROCEDURE set_audit_msg_id2(INOUT environment REFERENCE, IN msgId CHAR) BEGIN		
+		SET environment.Audit.Header.MessageId=msgId;
+End;
+
+--deprecated
+CREATE PROCEDURE set_audit_project(INOUT environment REFERENCE, IN project CHAR) BEGIN		
+		SET environment.Audit.Header.Project=project;
+End;
+
+CREATE PROCEDURE set_audit_subject(INOUT environment REFERENCE, IN subject CHAR) BEGIN		
+		SET environment.Audit.Header.Subject=subject;
+End;
+	
+CREATE PROCEDURE set_audit_destination_system(INOUT environment REFERENCE, IN destSys CHAR) BEGIN		
+		SET environment.Audit.Header.DestinationSystem=destSys;
+End;
+
+CREATE PROCEDURE set_audit_destination_system_version(INOUT environment REFERENCE, IN destSysVer CHAR) BEGIN		
+		SET environment.Audit.Header.DestinationSystemVersion=destSysVer;
+End;
+
+CREATE PROCEDURE set_audit_source_end_point(INOUT environment REFERENCE, IN srcEP CHAR) BEGIN		
+		SET environment.Audit.Header.SourceEP=srcEP;
+End;
+ 
+CREATE PROCEDURE set_audit_target_end_point(INOUT environment REFERENCE, IN targetEP CHAR) BEGIN		
+		SET environment.Audit.Header.TargetEP=targetEP;
+End;
+
+CREATE PROCEDURE set_audit_reprocess_end_point(INOUT environment REFERENCE, IN reprocEP CHAR) BEGIN		
+		SET environment.Audit.Header.ReprocessEP=reprocEP;
+End;
+
+--new not used
+/*
+CREATE PROCEDURE set_audit_source_endpoint(INOUT environment REFERENCE, IN srcEP CHAR, IN srcEPType CHAR) BEGIN		
+		SET environment.Audit.Header.SourceEP=srcEP;
+		SET environment.Audit.Header.SourceEPType=srcEPType;
+End;
+ */
+--deprecated
+CREATE PROCEDURE set_audit_message_destination(INOUT environment REFERENCE, IN messageDestination CHAR) BEGIN		
+		SET environment.Audit.Header.MessageDestination=messageDestination;
+End;
+
+CREATE PROCEDURE set_audit_created_by(INOUT environment REFERENCE, IN createdBy CHAR) BEGIN		
+		SET environment.Audit.Header.CreatedBy=createdBy;
+End;
+	
+CREATE PROCEDURE set_audit_service(INOUT environment REFERENCE, IN service CHAR) BEGIN		
+		SET environment.Audit.Service=service;
+End;
+	
+--deprecated use audit_entry
+/*CREATE PROCEDURE set_audit_notes(INOUT environment REFERENCE, IN notes CHAR) BEGIN		
+		SET environment.Audit.AuditNotes=notes;
+End;
+*/	
+CREATE PROCEDURE set_audit_create_timestamp(INOUT environment REFERENCE, IN createts CHAR) BEGIN		
+		SET environment.Audit.Header.CreateTimestamp=createts;
+End;
+
+		
+CREATE PROCEDURE set_audit_flag(INOUT environment REFERENCE, IN auditflag CHAR) BEGIN		
+		SET environment.Audit.Audit_Flag=auditflag;
+End;
+
+		
+CREATE PROCEDURE set_audit_encoding(INOUT environment REFERENCE, IN encoding INTEGER) BEGIN		
+	SET environment.Audit.Encoding = encoding;
+End;
+
+CREATE PROCEDURE set_audit_message_data_compression_flag(INOUT environment REFERENCE, IN isCompressed CHAR) BEGIN		
+	SET environment.Audit.MessageData.isCompressed = isCompressed;
+End;
+
+
+/*
+Changes for DR 97020 to make Include Payload configurable property
+*/
+--set include payload method
+CREATE PROCEDURE set_audit_include_payload_flag(INOUT environment REFERENCE, IN includePayload BOOLEAN) BEGIN		
+	SET environment.Audit.IncludePayload = includePayload;
+End;
+--get include payload method
+CREATE PROCEDURE get_audit_include_payload_flag(IN environment REFERENCE) RETURNS BOOLEAN BEGIN
+	IF environment.Audit.IncludePayload IS TRUE THEN
+		RETURN TRUE;
+	ELSE
+		RETURN FALSE;
+	END IF;
+End;
+
+/*
+End of Changes for DR 97020 
+*/
+
+
+--common functions	
+Create Function get_audit_status(IN environment REFERENCE) RETURNS CHAR
+Begin
+	
+	IF NULLIF(environment.Audit.ServiceStatus,'') IS NOT NULL THEN
+		return environment.Audit.ServiceStatus;
+	ElSE
+		return RECIEVED_STATUS; --default
+	END IF;
+End;			    
+
+Create Function get_audit_source_system(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.SourceSystem;
+End;			    
+
+Create Function get_audit_source_system_version(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.SourceSystemVersion;
+End;			
+
+Create Function get_audit_source_event_name(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.EventName;
+End;			
+
+Create Function get_audit_source_event_version(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.EventVersion;
+End;			
+
+Create Function get_audit_message_type(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return get_audit_source_event_name(environment); 
+End;			
+
+Create Function get_audit_correl_id(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.CorrelationId;
+End;			
+   
+   
+CREATE PROCEDURE get_audit_msg_id(IN environment REFERENCE) RETURNS CHAR 
+BEGIN		
+		return environment.Audit.Header.MessageId;
+End;
+   
+Create Function get_audit_project(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.Project;
+End;			
+
+Create Function get_audit_subject(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.Subject;
+	--return get_audit_gal_subject(environment);
+End;
+Create Function get_audit_gal_subject(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return AUDIT_SUBJECT_DEFAULT || '.' || environment.Audit.Header.Subject;
+End;
+
+Create Function get_audit_destination_system(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.DestinationSystem;
+End;			
+
+Create Function get_audit_destination_system_version(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.DestinationSystemVersion;
+End;			
+
+Create Function get_audit_source_end_point(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.SourceEP;
+End;			
+
+Create Function get_audit_target_end_point(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.TargetEP;
+End;			
+
+
+Create Function get_audit_reprocess_end_point(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.ReprocessEP;
+End;			
+
+--deprecated use get_audit_destination_system
+Create Function get_audit_message_destination(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.MessageDestination;
+End;			
+      
+Create Function get_audit_created_by(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.CreatedBy;
+End;			
+
+Create Function get_audit_service(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.Service;
+End;			
+
+-- depreacated use audit_entry
+Create Function get_audit_notes(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.AuditNotes;
+End;			
+
+Create Function get_audit_create_timestamp(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.CreateTimestamp;
+End;			
+
+--deprecated
+Create Function get_audit_message_source(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Header.MessageSource;
+End;			
+
+Create Function get_audit_flag(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.Audit_Flag;
+End;			
+
+Create Function get_audit_encoding(IN environment REFERENCE) RETURNS INTEGER
+Begin
+	return environment.Audit.Encoding;
+End;			
+
+
+Create Function get_audit_message_data_compression_flag(IN environment REFERENCE) RETURNS CHAR
+Begin
+	return environment.Audit.MessageData.isCompressed;
+End;
+
+--deprecated
+Create Function get_audit_source_system_id(IN environment REFERENCE) RETURNS CHAR
+Begin
+	IF NULLIF(environment.Audit.Header.SourceSystemId,'') IS NOT NULL THEN			
+		return environment.Audit.Header.SourceSystemId;
+	ELSE
+		return get_audit_source_system(environment);
+	END IF;
+End;			
+
+CREATE COMPUTE MODULE audit_subflow_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 CALL CopyMessageHeaders();
+ 		 SET OutputRoot.MQMD.CorrelId=InputRoot.MQMD.MsgId;	
+		 CALL CopyEntireMessage();
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+-- prob won't be used but retained just in case
+CREATE COMPUTE MODULE audit_subflow_newMQMD_Compute
+	CREATE FUNCTION Main() RETURNS BOOLEAN
+	BEGIN
+		 --CALL CopyMessageHeaders();
+	 SET OutputRoot.Properties.MessageDomain = 'XMLNS';
+		 SET OutputRoot.Properties.MessageSet='';
+		 SET OutputRoot.Properties.MessageType='';
+		 SET OutputRoot.Properties.MessageFormat='XML1';
+		  
+		 SET OutputRoot.Properties.CodedCharSetId=1208;
+		 SET OutputRoot.Properties.Encoding=546;
+		 SET OutputRoot.MQMD.StrucId = MQMD_STRUC_ID;
+		 SET OutputRoot.MQMD.Version = MQMD_CURRENT_VERSION;
+		 SET OutputRoot.MQMD.MsgId=MQMI_NONE;
+		 SET OutputRoot.MQMD.CorrelId=MQCI_NONE;
+		 SET OutputRoot.MQMD.CodedCharSetId = 1208;
+ 		 SET OutputRoot.MQMD.Encoding = 546;
+		 SET OutputRoot.MQMD.Format='XML';
+		 --SET OutputRoot.Properties.MessageDomain = 'XML1';
+		 
+		 CALL CopyEntireMessage();
+		 
+		RETURN TRUE;
+	END;
+
+	CREATE PROCEDURE CopyMessageHeaders() BEGIN
+		DECLARE I INTEGER 1;
+		DECLARE J INTEGER;
+		SET J = CARDINALITY(InputRoot.*[]);
+		WHILE I < J DO
+			SET OutputRoot.*[I] = InputRoot.*[I];
+			SET I = I + 1;
+		END WHILE;
+	END;
+
+	CREATE PROCEDURE CopyEntireMessage() BEGIN
+		SET OutputRoot = InputRoot;
+	END;
+END MODULE;
+
+/*All Flows making use of Common Audit logger and GAL can make use of this to set custom User Defined audit entries  to pass to GAL-Ravi*/
+
+CREATE PROCEDURE set_audit_entry(INOUT environment REFERENCE, IN name CHAR, IN value CHAR) BEGIN		
+		
+		DECLARE cnt INT CARDINALITY(environment.Audit.AE.NMPair[]);
+		IF CARDINALITY(environment.Audit.AE.NMPair[]) > 0  THEN
+			SET cnt=cnt + 1;
+		ELSE
+			SET cnt = 1;
+		END IF;
+
+		if name is NOT NULL then
+			SET environment.Audit.AE.NMPair[cnt].Name = name;
+			SET environment.Audit.AE.NMPair[cnt].Value = value;
+		end if;
+		
+END;
+
+/*All Flows making use of Common Audit logger and GAL can make use of this to set custom User Defined audit entries  to pass to GAL-Ravi*/
+--recommended method() to use over set_audit_entry.
+CREATE PROCEDURE set_audit_entry_by_idx(INOUT environment REFERENCE, IN idx INT, IN name CHAR, IN value CHAR) BEGIN		
+		IF name IS NOT NULL THEN
+			SET environment.Audit.AE.NMPair[idx].Name = name;
+			SET environment.Audit.AE.NMPair[idx].Value = value;
+		END IF;		
+END;
+
+Create Function get_stripmsg_correl_id(IN inref REFERENCE) RETURNS CHAR
+Begin	
+	    DECLARE msgid CHAR;
+		SET msgid = cast(inref.ErrorMessage.CorrelationId as char); 
+		return trim_msgid(msgid);	
+End;			
+
+Create Function trim_msgid(IN msgid CHAR) RETURNS CHAR
+Begin	
+	SET msgid = REPLACE(msgid, 'X', '');
+	SET msgid = REPLACE(msgid, '''', ''); 
+	return msgid;
+End;			
+		
+Create Function get_errmsg_msg_id(IN inref REFERENCE) RETURNS CHAR
+Begin	
+	    DECLARE msgid CHAR;
+		SET msgid = cast(inref.ErrorMessage.MessageId as char); 
+		return trim_msgid(msgid);		
+End;			
